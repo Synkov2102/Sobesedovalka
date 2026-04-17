@@ -1,0 +1,315 @@
+.playground {
+  margin: 0;
+}
+
+.playground--fill {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.playground--fill .playground__intro {
+  display: none;
+}
+
+.playground__collabBar {
+  flex-shrink: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 10%, var(--code-bg));
+  color: var(--text-h);
+}
+
+.playground__collabBar code {
+  font-size: 12px;
+}
+
+.playground__collabHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.playground__collabSep {
+  opacity: 0.55;
+}
+
+.playground__collabHint {
+  margin: 0 0 8px;
+  font-size: 12px;
+  opacity: 0.85;
+  line-height: 1.35;
+}
+
+.playground__roster {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: min(28vh, 220px);
+  overflow: auto;
+}
+
+.playground__rosterItem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg) 65%, var(--code-bg));
+  border: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.playground__rosterItem.is-me {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
+.playground__rosterName {
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.playground__rosterMeta {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12px;
+  opacity: 0.88;
+  text-align: right;
+  word-break: break-all;
+}
+
+.playground--fill .playground__toolbar {
+  flex-shrink: 0;
+  margin-bottom: 0;
+  padding: 8px 10px;
+}
+
+.playground__spWrap {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* SandpackProvider renders a root div — stretch it so the inner layout can fill height. */
+.playground__spWrap > div {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.playground__providerInner {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.playground__intro {
+  margin: 0 0 14px;
+  font-size: 14px;
+  line-height: 145%;
+  opacity: 0.92;
+}
+
+.playground__intro code {
+  font-size: 13px;
+}
+
+.playground__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--code-bg) 75%, var(--bg));
+}
+
+.playground__toolbarGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.playground__toolbarGroup--end {
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+.playground__label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-h);
+}
+
+.playground__toolbarRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.playground__input {
+  flex: 1 1 160px;
+  min-width: 0;
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.playground__btn {
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 2px solid var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.playground__btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.playground__btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.playground__btn--danger {
+  border-color: color-mix(in srgb, #dc2626 45%, var(--border));
+  background: color-mix(in srgb, #dc2626 12%, transparent);
+  color: #dc2626;
+}
+
+@media (prefers-color-scheme: dark) {
+  .playground__btn--danger {
+    border-color: color-mix(in srgb, #f87171 45%, var(--border));
+    background: color-mix(in srgb, #f87171 15%, transparent);
+    color: #f87171;
+  }
+}
+
+.playground__sandpack {
+  min-height: min(62vh, 640px);
+  --sp-border-radius: 8px;
+}
+
+.playground--fill .playground__sandpack {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: 100% !important;
+}
+
+.playground--fill .playground__sandpack.sp-layout {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch !important;
+}
+
+/* Default theme pins columns to 300px — force full height of the layout row */
+.playground--fill .sp-layout > .sp-file-explorer {
+  flex: 0 0 220px !important;
+  max-width: min(280px, 30vw) !important;
+  min-width: 160px !important;
+  height: 100% !important;
+  max-height: none !important;
+  overflow: auto !important;
+}
+
+.playground--fill .sp-layout > .sp-editor {
+  flex: 1 1 0% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.playground--fill .sp-layout > .sp-preview {
+  flex: 1 1 0% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.playground--fill .sp-editor .sp-code-editor {
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.playground--fill .sp-editor .cm-editor {
+  flex: 1 1 0% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+}
+
+.playground--fill .sp-editor .cm-scroller {
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  max-height: none !important;
+}
+
+.playground--fill .sp-preview .sp-preview-container {
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.playground--fill .sp-preview .sp-preview-iframe {
+  flex: 1 1 0% !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  border: none;
+}
+
+.playground__sandpack.sp-layout {
+  border: 1px solid var(--border);
+}
