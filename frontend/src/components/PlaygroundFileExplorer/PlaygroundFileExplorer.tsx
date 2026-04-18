@@ -1,6 +1,9 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
 import { useSandpack } from '@codesandbox/sandpack-react'
+import type { CollabPeerDTO } from '../../collab/collab.types'
+import { peerAccentRgbCss, peerAccentRgbaCss } from '../../collab/peerColor'
+import { normalizeSandpackFilePath } from '../../collab/sandpackPaths'
 import { VITE_REACT_TS_PROTECTED } from './constants/playgroundFileExplorer.constants'
 import { useClearDropTargetWhenNoDrag } from './hooks/useDragDropUiSync'
 import { useCopiedPathReset } from './hooks/useCopiedPathReset'
@@ -49,7 +52,11 @@ function FileTypeIcon({ filePath }: { filePath: string }) {
   )
 }
 
-export function PlaygroundFileExplorer() {
+export function PlaygroundFileExplorer({
+  collabPeers = [],
+}: {
+  collabPeers?: CollabPeerDTO[]
+} = {}) {
   const { sandpack } = useSandpack()
   const editorInputRef = useRef<HTMLInputElement | null>(null)
   const draftSelectKeyRef = useRef<string | null>(null)
@@ -81,6 +88,30 @@ export function PlaygroundFileExplorer() {
     () => buildExplorerTree(filePaths, folderPaths),
     [filePaths, folderPaths],
   )
+
+  const peersByActiveFile = useMemo(() => {
+    const m = new Map<string, CollabPeerDTO[]>()
+    for (const p of collabPeers) {
+      const f = normalizeSandpackFilePath(p.activeFile)
+      if (!f) {
+        continue
+      }
+      const list = m.get(f)
+      if (list) {
+        list.push(p)
+      } else {
+        m.set(f, [p])
+      }
+    }
+    for (const list of m.values()) {
+      list.sort((a, b) =>
+        a.displayName.localeCompare(b.displayName, undefined, {
+          sensitivity: 'base',
+        }),
+      )
+    }
+    return m
+  }, [collabPeers])
 
   const canRenameFile = useCallback(
     (path: string) => !VITE_REACT_TS_PROTECTED.has(path),
@@ -523,6 +554,7 @@ export function PlaygroundFileExplorer() {
       const isFocused = focusedPath === file.path
       const isActive = file.path === active
       const parentPath = getParentPath(file.path)
+      const filePeers = peersByActiveFile.get(file.path) ?? []
 
       return (
         <div
@@ -588,6 +620,28 @@ export function PlaygroundFileExplorer() {
           >
             <FileTypeIcon filePath={file.path} />
             <span className="playground__treeName">{file.name}</span>
+            {filePeers.length > 0 ? (
+              <span
+                className="playground__filePeerDots"
+                aria-label={`Открыто: ${filePeers.map((p) => p.displayName).join(', ')}`}
+              >
+                {filePeers.map((p) => {
+                  const fill = peerAccentRgbCss(p)
+                  const ring = peerAccentRgbaCss(p, 0.42)
+                  return (
+                    <span
+                      key={p.clientId}
+                      className="playground__filePeerDot"
+                      style={{
+                        background: fill,
+                        boxShadow: `0 0 0 1px ${ring}`,
+                      }}
+                      title={p.displayName}
+                    />
+                  )
+                })}
+              </span>
+            ) : null}
           </button>
         </div>
       )
@@ -600,6 +654,7 @@ export function PlaygroundFileExplorer() {
       focusedPath,
       handleDropToFolder,
       openContextMenu,
+      peersByActiveFile,
       renderDraftRow,
       sandpack,
     ],

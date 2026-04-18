@@ -4,13 +4,14 @@
   "description": "Full-stack scaffold for live coding interviews (NestJS + React/Vite)",
   "scripts": {
     "postinstall": "npm install --prefix frontend && npm install --prefix backend",
-    "dev": "concurrently -n api,web -c blue,green \"npm run start:dev --prefix backend\" \"npm run dev --prefix frontend\"",
+    "dev": "concurrently -n api,web -c blue,green \"npm run start:dev --prefix backend\" \"wait-on http://127.0.0.1:3000/api/health -t 120000 && npm run dev --prefix frontend\"",
     "dev:backend": "npm run start:dev --prefix backend",
     "dev:frontend": "npm run dev --prefix frontend",
     "build": "npm run build --prefix backend && npm run build --prefix frontend",
     "lint": "npm run lint --prefix backend && npm run lint --prefix frontend"
   },
   "devDependencies": {
-    "concurrently": "^9.2.0"
+    "concurrently": "^9.2.0",
+    "wait-on": "^8.0.5"
   }
 }

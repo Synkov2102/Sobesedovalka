@@ -8,11 +8,18 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import {
+  hueFromClientId,
+  normHue,
+  pickHueUniqueInRoom,
+  syncPeerPresenceColors,
+} from './collab-color';
+import { normalizeSandpackFilePath } from './sandpack-paths';
 import { randomDisplayName } from './collab-names';
-import { CollabPersistenceService } from './collab-persistence.service';
+import { CollabMongoRepository } from './collab-mongo.repository';
 import type { RoomPeer } from './collab.types';
 
-/** Files + live roster per room; file tree persisted under `data/collab/`. */
+/** Collab files + roster: MongoDB only (see `MONGODB_URI`). */
 @WebSocketGateway({
   cors: {
     origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
@@ -25,7 +32,7 @@ export class CollabGateway implements OnGatewayDisconnect {
   @WebSocketServer()
   server!: Server;
 
-  constructor(private readonly persistence: CollabPersistenceService) {}
+  constructor(private readonly mongoRepo: CollabMongoRepository) {}
 
   private readonly roomFiles = new Map<string, Map<string, string>>();
   /** room -> clientId -> peer */
@@ -37,6 +44,17 @@ export class CollabGateway implements OnGatewayDisconnect {
   >();
   private readonly lastRosterPayload = new Map<string, string>();
 
+  /** Same logical client can have several sockets (reconnect, React StrictMode). */
+  private socketCountForClient(room: string, clientId: string): number {
+    let n = 0;
+    for (const m of this.socketMeta.values()) {
+      if (m.room === room && m.clientId === clientId) {
+        n++;
+      }
+    }
+    return n;
+  }
+
   handleDisconnect(client: Socket): void {
     const meta = this.socketMeta.get(client.id);
     if (!meta) {
@@ -44,11 +62,18 @@ export class CollabGateway implements OnGatewayDisconnect {
     }
     this.socketMeta.delete(client.id);
     const { room, clientId } = meta;
-    this.roomPeers.get(room)?.delete(clientId);
-    if (this.roomPeers.get(room)?.size === 0) {
-      this.roomPeers.delete(room);
-      this.lastRosterPayload.delete(room);
+
+    if (this.socketCountForClient(room, clientId) === 0) {
+      this.roomPeers.get(room)?.delete(clientId);
+      void this.mongoRepo
+        .deletePeer(room, clientId)
+        .catch((e: unknown) => this.logger.warn(String(e)));
+      if (this.roomPeers.get(room)?.size === 0) {
+        this.roomPeers.delete(room);
+        this.lastRosterPayload.delete(room);
+      }
     }
+
     this.broadcastRoster(room);
   }
 
@@ -72,20 +97,43 @@ export class CollabGateway implements OnGatewayDisconnect {
     const peers = this.roomPeers.get(room)!;
     let peer = peers.get(clientId);
     if (!peer) {
+      const restored = await this.mongoRepo.loadPeer(room, clientId);
+      if (restored) {
+        peer = restored;
+        peers.set(clientId, peer);
+      }
+    }
+
+    if (!peer) {
+      const used = this.collectRoomHueSet(room);
       peer = {
         displayName: randomDisplayName(),
         activeFile: '',
+        hue: pickHueUniqueInRoom(used, clientId),
         anchorLine: 1,
         anchorCol: 1,
         headLine: 1,
         headCol: 1,
       };
       peers.set(clientId, peer);
+    } else {
+      const used = this.collectRoomHueSet(room, clientId);
+      const h = peer.hue != null ? normHue(peer.hue) : null;
+      if (h == null || used.has(h)) {
+        peer.hue = pickHueUniqueInRoom(used, clientId);
+      }
     }
+
+    syncPeerPresenceColors(peer, clientId);
+
+    await this.mongoRepo.ensureRoom(room);
+    await this.mongoRepo.savePeer(room, clientId, peer);
 
     client.emit('collab-welcome', {
       clientId,
       displayName: peer.displayName,
+      hue: peer.hue as number,
+      colorHex: peer.colorHex as string,
     });
     client.emit('collab-snapshot', this.snapshot(room));
     this.broadcastRoster(room);
@@ -117,7 +165,7 @@ export class CollabGateway implements OnGatewayDisconnect {
       return;
     }
     if (typeof body.activeFile === 'string') {
-      peer.activeFile = body.activeFile;
+      peer.activeFile = normalizeSandpackFilePath(body.activeFile);
     }
 
     if (
@@ -147,6 +195,13 @@ export class CollabGateway implements OnGatewayDisconnect {
     } else {
       peer.anchorLine = peer.headLine;
       peer.anchorCol = peer.headCol;
+    }
+
+    const p = this.roomPeers.get(room)?.get(clientId);
+    if (p) {
+      void this.mongoRepo
+        .savePeer(room, clientId, p)
+        .catch((e: unknown) => this.logger.warn(String(e)));
     }
 
     this.broadcastRoster(room);
@@ -181,7 +236,7 @@ export class CollabGateway implements OnGatewayDisconnect {
         }
       }
     }
-    this.persistRoom(room);
+    this.persistFilesAfterAnnounce(room);
   }
 
   @SubscribeMessage('collab-file')
@@ -206,7 +261,9 @@ export class CollabGateway implements OnGatewayDisconnect {
       this.roomFiles.set(room, new Map());
     }
     this.roomFiles.get(room)!.set(path, content);
-    this.persistRoom(room);
+    void this.mongoRepo
+      .upsertFile(room, path, content)
+      .catch((e: unknown) => this.logger.warn(String(e)));
     client.to(room).emit('collab-file', { path, content, from });
   }
 
@@ -222,8 +279,13 @@ export class CollabGateway implements OnGatewayDisconnect {
     if (!room || !path) {
       return;
     }
-    this.roomFiles.get(room)?.delete(path);
-    this.persistRoom(room);
+    if (!this.roomFiles.has(room)) {
+      return;
+    }
+    this.roomFiles.get(room)!.delete(path);
+    void this.mongoRepo
+      .deleteFile(room, path)
+      .catch((e: unknown) => this.logger.warn(String(e)));
     client.to(room).emit('collab-remove', { path, from });
   }
 
@@ -231,17 +293,26 @@ export class CollabGateway implements OnGatewayDisconnect {
     const peersMap = this.roomPeers.get(room);
     const peers = peersMap
       ? Array.from(peersMap.entries())
-          .map(([clientId, p]) => ({
-            clientId,
-            displayName: p.displayName,
-            activeFile: p.activeFile,
-            line: p.headLine,
-            col: p.headCol,
-            anchorLine: p.anchorLine,
-            anchorCol: p.anchorCol,
-            headLine: p.headLine,
-            headCol: p.headCol,
-          }))
+          .map(([clientId, p]) => {
+            if (p.hue == null) {
+              p.hue = hueFromClientId(clientId);
+            }
+            syncPeerPresenceColors(p, clientId);
+            const hue = p.hue;
+            return {
+              clientId,
+              displayName: p.displayName,
+              activeFile: p.activeFile,
+              hue,
+              colorHex: p.colorHex as string,
+              line: p.headLine,
+              col: p.headCol,
+              anchorLine: p.anchorLine,
+              anchorCol: p.anchorCol,
+              headLine: p.headLine,
+              headCol: p.headCol,
+            };
+          })
           .sort((a, b) => a.clientId.localeCompare(b.clientId))
       : [];
     const payload = JSON.stringify({ count: peers.length, peers });
@@ -263,13 +334,30 @@ export class CollabGateway implements OnGatewayDisconnect {
     return Object.fromEntries(m);
   }
 
-  /** Load disk state when memory is empty (new process or room never touched this run). */
+  private collectRoomHueSet(room: string, excludeClientId?: string): Set<number> {
+    const used = new Set<number>();
+    const map = this.roomPeers.get(room);
+    if (!map) {
+      return used;
+    }
+    for (const [cid, p] of map.entries()) {
+      if (excludeClientId !== undefined && cid === excludeClientId) {
+        continue;
+      }
+      if (p.hue != null) {
+        used.add(normHue(p.hue));
+      }
+    }
+    return used;
+  }
+
   private async ensureRoomHydrated(room: string): Promise<void> {
     const cur = this.roomFiles.get(room);
     if (cur && cur.size > 0) {
       return;
     }
-    const loaded = await this.persistence.loadRoom(room);
+    await this.mongoRepo.ensureRoom(room);
+    const loaded = await this.mongoRepo.loadFiles(room);
     if (Object.keys(loaded).length === 0) {
       if (!this.roomFiles.has(room)) {
         this.roomFiles.set(room, new Map());
@@ -279,9 +367,9 @@ export class CollabGateway implements OnGatewayDisconnect {
     this.roomFiles.set(room, new Map(Object.entries(loaded)));
   }
 
-  private persistRoom(room: string): void {
-    void this.persistence
-      .saveRoom(room, this.snapshot(room))
+  private persistFilesAfterAnnounce(room: string): void {
+    void this.mongoRepo
+      .replaceRoomFiles(room, this.snapshot(room))
       .catch((e: unknown) => this.logger.warn(String(e)));
   }
 }

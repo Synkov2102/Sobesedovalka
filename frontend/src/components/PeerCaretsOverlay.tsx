@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSandpack } from '@codesandbox/sandpack-react'
 import type { CollabPeerDTO } from '../collab/collab.types'
+import { peerAccentRgbCss, peerAccentRgbaCss } from '../collab/peerColor'
+import { normalizeSandpackFilePath } from '../collab/sandpackPaths'
 
 function lineColToPos(doc: Text, line: number, col: number): number {
   const ln = Math.min(Math.max(1, line), doc.lines)
@@ -74,18 +76,13 @@ function selectionScreenRects(
   return rects
 }
 
-function hueFromId(id: string): number {
-  let h = 0
-  for (let i = 0; i < id.length; i++) {
-    h = (h * 31 + id.charCodeAt(i)) % 360
-  }
-  return h
-}
-
 type PeerMark = {
   id: string
   name: string
   color: string
+  colorSelBg: string
+  colorSelBorder: string
+  colorRing: string
   caret: { left: number; top: number; height: number } | null
   selection: Array<{ left: number; top: number; width: number; height: number }>
 }
@@ -112,12 +109,15 @@ export function PeerCaretsOverlay({
         return
       }
       const view = EditorView.findFromDOM(cm)
-      const active = sandpack.activeFile
+      const active = normalizeSandpackFilePath(sandpack.activeFile ?? '')
       const next: PeerMark[] = []
       if (view && active) {
         const doc = view.state.doc
         for (const p of peers) {
-          if (p.clientId === selfId || p.activeFile !== active) {
+          if (
+            p.clientId === selfId ||
+            normalizeSandpackFilePath(p.activeFile) !== active
+          ) {
             continue
           }
           const { anchorLine, anchorCol, headLine, headCol } = peerAnchorHead(p)
@@ -125,8 +125,10 @@ export function PeerCaretsOverlay({
           const h = lineColToPos(doc, headLine, headCol)
           const from = Math.min(a, h)
           const to = Math.max(a, h)
-          const hue = hueFromId(p.clientId)
-          const color = `hsl(${hue} 72% 40%)`
+          const color = peerAccentRgbCss(p)
+          const colorSelBg = peerAccentRgbaCss(p, 0.22)
+          const colorSelBorder = peerAccentRgbaCss(p, 0.45)
+          const colorRing = peerAccentRgbaCss(p, 0.55)
           const selection =
             from < to ? selectionScreenRects(view, doc, from, to) : []
           const headPos = h
@@ -144,6 +146,9 @@ export function PeerCaretsOverlay({
               id: p.clientId,
               name: p.displayName,
               color,
+              colorSelBg,
+              colorSelBorder,
+              colorRing,
               caret,
               selection,
             })
@@ -175,12 +180,12 @@ export function PeerCaretsOverlay({
                 top: r.top,
                 width: r.width,
                 height: r.height,
-                background: `color-mix(in srgb, ${m.color} 22%, transparent)`,
+                background: m.colorSelBg,
                 borderRadius: 2,
                 pointerEvents: 'none',
                 zIndex: 9998,
                 boxSizing: 'border-box',
-                border: `1px solid color-mix(in srgb, ${m.color} 45%, transparent)`,
+                border: `1px solid ${m.colorSelBorder}`,
               }}
             />
           ))}
@@ -196,7 +201,7 @@ export function PeerCaretsOverlay({
                 background: m.color,
                 pointerEvents: 'none',
                 zIndex: 9999,
-                boxShadow: `0 0 0 1px color-mix(in srgb, ${m.color} 35%, white)`,
+                boxShadow: `0 0 0 1px ${m.colorRing}`,
               }}
               title={m.name}
             />

@@ -5,9 +5,10 @@ import {
   SandpackCodeEditor,
   SandpackPreview,
 } from '@codesandbox/sandpack-react'
-import type { CollabPeerDTO } from '../collab/collab.types'
+import type { CollabWelcomePayload, CollabPeerDTO } from '../collab/collab.types'
 import { CollabSync } from './CollabSync'
 import { PeerCaretsOverlay } from './PeerCaretsOverlay'
+import { PlaygroundCollabBar } from './PlaygroundCollabBar'
 import { PlaygroundFileExplorer } from './PlaygroundFileExplorer'
 import './Playground.css'
 
@@ -125,8 +126,8 @@ export function Playground() {
     [],
   )
 
-  const onCollabWelcome = useCallback((name: string) => {
-    setMyDisplayName(name)
+  const onCollabWelcome = useCallback((welcome: CollabWelcomePayload) => {
+    setMyDisplayName(welcome.displayName)
   }, [])
 
   /** Stable refs — Sandpack resets all file state whenever `files` identity changes. */
@@ -155,41 +156,6 @@ export function Playground() {
         <code>App.tsx</code>.
       </p>
 
-      <div className="playground__collabBar" role="status">
-        <div className="playground__collabHead">
-          <strong>Онлайн: {collabCount}</strong>
-          <span className="playground__collabSep">·</span>
-          комната <code>{collabRoom}</code>
-          {myDisplayName ? (
-            <>
-              <span className="playground__collabSep">·</span>
-              вы: <strong>{myDisplayName}</strong>
-            </>
-          ) : null}
-        </div>
-        <p className="playground__collabHint">
-          Одинаковый <code>?room=…</code> и доступ к API <code>:3000</code>.
-          Имена выдаёт сервер (прилагательное + животное).
-        </p>
-        <ul className="playground__roster">
-          {collabPeers.map((p) => (
-            <li
-              key={p.clientId}
-              className={
-                p.clientId === collabClientId
-                  ? 'playground__rosterItem is-me'
-                  : 'playground__rosterItem'
-              }
-            >
-              <span className="playground__rosterName">{p.displayName}</span>
-              <span className="playground__rosterMeta">
-                {p.activeFile || '—'} · {p.line}:{p.col}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </div>
-
       <div className="playground__spWrap">
         <SandpackProvider
           template="vite-react-ts"
@@ -197,6 +163,12 @@ export function Playground() {
           files={sandpackFiles}
           options={sandpackOptions}
         >
+          <PlaygroundCollabBar
+            room={collabRoom}
+            collabPeers={collabPeers}
+            collabCount={collabCount}
+            myDisplayName={myDisplayName}
+          />
           <CollabSync
             room={collabRoom}
             clientId={collabClientId}
@@ -206,7 +178,7 @@ export function Playground() {
           <PeerCaretsOverlay selfId={collabClientId} peers={collabPeers} />
           <div className="playground__providerInner">
             <SandpackLayout className="playground__sandpack">
-              <PlaygroundFileExplorer />
+              <PlaygroundFileExplorer collabPeers={collabPeers} />
               <SandpackCodeEditor showTabs showLineNumbers closableTabs />
               <SandpackPreview showNavigator />
             </SandpackLayout>

@@ -1,7 +1,15 @@
 import { useEffect, useRef, useLayoutEffect, useState } from 'react'
 import { useSandpack } from '@codesandbox/sandpack-react'
 import { io, type Socket } from 'socket.io-client'
-import type { CollabPeerDTO } from '../collab/collab.types'
+import type {
+  CollabPeerDTO,
+  CollabWelcomePayload,
+} from '../collab/collab.types'
+import {
+  normalizePeerColorHexWire,
+  normalizePeerHueWire,
+} from '../collab/peerColor'
+import { normalizeSandpackFilePath } from '../collab/sandpackPaths'
 import { readSandpackSelection } from '../collab/sandpackCursor'
 
 function collabWsUrl(): string {
@@ -78,7 +86,7 @@ export function CollabSync({
   room: string
   clientId: string
   onRoster?: (peers: CollabPeerDTO[], count: number) => void
-  onWelcome?: (displayName: string) => void
+  onWelcome?: (welcome: CollabWelcomePayload) => void
 }) {
   const { sandpack, listen } = useSandpack()
   /** Wait for server snapshot before collab-announce (avoids template wiping saves). */
@@ -132,7 +140,12 @@ export function CollabSync({
 
     socket.on(
       'collab-welcome',
-      (p: { displayName?: string; clientId?: string }) => {
+      (p: {
+        displayName?: string
+        clientId?: string
+        hue?: unknown
+        colorHex?: unknown
+      }) => {
         lastPresence.current = {
           file: '',
           anchorLine: 0,
@@ -140,16 +153,47 @@ export function CollabSync({
           headLine: 0,
           headCol: 0,
         }
-        if (typeof p?.displayName === 'string') {
-          onWelcomeRef.current?.(p.displayName)
+        if (typeof p?.displayName !== 'string') {
+          return
         }
+        const hue = normalizePeerHueWire(p.hue)
+        const colorHex = normalizePeerColorHexWire(p.colorHex)
+        if (hue === undefined || colorHex === undefined) {
+          return
+        }
+        const cid =
+          typeof p.clientId === 'string' && p.clientId.length > 0
+            ? p.clientId
+            : clientId
+        onWelcomeRef.current?.({
+          clientId: cid,
+          displayName: p.displayName,
+          hue,
+          colorHex,
+        })
       },
     )
 
     socket.on(
       'collab-roster',
       (payload: { peers?: CollabPeerDTO[]; count?: number }) => {
-        const peers = Array.isArray(payload?.peers) ? payload.peers : []
+        const raw = Array.isArray(payload?.peers) ? payload.peers : []
+        const peers: CollabPeerDTO[] = raw.map((p) => {
+          const typed = p as CollabPeerDTO & {
+            hue?: unknown
+            colorHex?: unknown
+          }
+          const hue = normalizePeerHueWire(typed.hue)
+          const colorHex = normalizePeerColorHexWire(typed.colorHex)
+          let next: CollabPeerDTO = { ...typed }
+          if (hue !== undefined) {
+            next = { ...next, hue }
+          }
+          if (colorHex !== undefined) {
+            next = { ...next, colorHex }
+          }
+          return next
+        })
         const count =
           typeof payload?.count === 'number' ? payload.count : peers.length
         if (rosterRaf !== null) {
@@ -315,7 +359,9 @@ export function CollabSync({
       if (!socket?.connected) {
         return
       }
-      const file = sandpackRef.current.activeFile ?? ''
+      const file = normalizeSandpackFilePath(
+        sandpackRef.current.activeFile ?? '',
+      )
       const sel = readSandpackSelection()
       const anchorLine = sel?.anchor.line ?? 1
       const anchorCol = sel?.anchor.col ?? 1

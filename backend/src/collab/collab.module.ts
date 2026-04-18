@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 import { CollabGateway } from './collab.gateway';
-import { CollabPersistenceService } from './collab-persistence.service';
+import { CollabMongoRepository } from './collab-mongo.repository';
 
 @Module({
-  providers: [CollabPersistenceService, CollabGateway],
+  providers: [CollabMongoRepository, CollabGateway],
 })
 export class CollabModule {}
