@@ -4,25 +4,12 @@ import {
   SandpackLayout,
   SandpackCodeEditor,
   SandpackPreview,
-  SandpackFileExplorer,
-  useSandpack,
 } from '@codesandbox/sandpack-react'
 import type { CollabPeerDTO } from '../collab/collab.types'
 import { CollabSync } from './CollabSync'
 import { PeerCaretsOverlay } from './PeerCaretsOverlay'
+import { PlaygroundFileExplorer } from './PlaygroundFileExplorer'
 import './Playground.css'
-
-const VITE_REACT_TS_PROTECTED = new Set([
-  '/App.tsx',
-  '/index.tsx',
-  '/index.html',
-  '/package.json',
-  '/tsconfig.json',
-  '/tsconfig.node.json',
-  '/vite-env.d.ts',
-  '/vite.config.ts',
-  '/styles.css',
-])
 
 /** App entry for the sandbox — \\${n} stays literal in the generated file. */
 const STARTER_APP = `import "./styles.css";
@@ -34,8 +21,8 @@ export default function App() {
     <main className="sandbox-main">
       <h1>React + Vite (TypeScript)</h1>
       <p>
-        Create <code>.tsx</code> files with the toolbar, then add an import at the top
-        of this file and render your component below.
+        Create folders and <code>.tsx</code> files in the file explorer, then add an
+        import at the top of this file and render your component below.
       </p>
       <button type="button" onClick={() => setN((c) => c + 1)}>
         Clicks: \${n}
@@ -80,68 +67,6 @@ const STARTER_STYLES = `.sandbox-main {
 }
 `
 
-function pathToComponentName(relativePath: string): string {
-  const base =
-    relativePath
-      .replace(/^\/+/, '')
-      .replace(/\.tsx?$/i, '')
-      .split('/')
-      .pop() || 'Item'
-  const pascal = base
-    .split(/[-_\s]+/)
-    .filter(Boolean)
-    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-    .join('')
-  const ident = /^[A-Za-z_$]/.test(pascal) ? pascal : `C${pascal}`
-  return ident || 'Item'
-}
-
-function importPathFromApp(filePath: string): string {
-  const normalized = filePath.replace(/^\/+/, '').replace(/\.tsx$/i, '')
-  return normalized.startsWith('./') ? normalized : `./${normalized}`
-}
-
-function defaultComponentSource(filePath: string): string {
-  const name = pathToComponentName(filePath)
-  const imp = importPathFromApp(filePath)
-  return `export function ${name}() {
-  return (
-    <section
-      style={{
-        padding: "0.75rem",
-        border: "1px dashed #94a3b8",
-        borderRadius: 8,
-        marginTop: "0.75rem",
-      }}
-    >
-      <strong>${name}</strong>
-      <p style={{ margin: "0.35rem 0 0", fontSize: 14 }}>
-        Import in App.tsx: <code>import { ${name} } from "${imp}"</code>
-      </p>
-    </section>
-  );
-}
-`
-}
-
-function normalizeNewFilePath(input: string): string | null {
-  let p = input.trim().replace(/\\/g, '/')
-  if (!p) {
-    return null
-  }
-  p = p.replace(/^\/+/, '')
-  if (!p) {
-    return null
-  }
-  p = `/${p}`
-  if (!p.endsWith('.tsx') && !p.endsWith('.ts')) {
-    p += '.tsx'
-  }
-  if (!p.endsWith('.tsx')) {
-    return null
-  }
-  return p
-}
 
 function useCollabRoom(): string {
   return useMemo(() => {
@@ -182,72 +107,6 @@ function useSystemTheme(): 'light' | 'dark' {
     return () => mq.removeEventListener('change', go)
   }, [])
   return mode
-}
-
-function PlaygroundToolbar() {
-  const { sandpack } = useSandpack()
-  const [rawPath, setRawPath] = useState('components/Widget')
-
-  const active = sandpack.activeFile
-  const canDelete = Boolean(active && !VITE_REACT_TS_PROTECTED.has(active))
-
-  const handleAdd = () => {
-    const path = normalizeNewFilePath(rawPath)
-    if (!path) {
-      return
-    }
-    if (sandpack.files[path]) {
-      sandpack.openFile(path)
-      return
-    }
-    sandpack.addFile(path, defaultComponentSource(path), true)
-    sandpack.openFile(path)
-  }
-
-  const handleDelete = () => {
-    if (!active || !canDelete) {
-      return
-    }
-    sandpack.deleteFile(active, true)
-  }
-
-  return (
-    <div className="playground__toolbar">
-      <div className="playground__toolbarGroup">
-        <label className="playground__label" htmlFor="new-file-path">
-          New file
-        </label>
-        <div className="playground__toolbarRow">
-          <input
-            id="new-file-path"
-            className="playground__input"
-            value={rawPath}
-            onChange={(e) => setRawPath(e.target.value)}
-            placeholder="components/Widget or Button.tsx"
-            spellCheck={false}
-          />
-          <button type="button" className="playground__btn" onClick={handleAdd}>
-            Create
-          </button>
-        </div>
-      </div>
-      <div className="playground__toolbarGroup playground__toolbarGroup--end">
-        <button
-          type="button"
-          className="playground__btn playground__btn--danger"
-          onClick={handleDelete}
-          disabled={!canDelete}
-          title={
-            canDelete
-              ? `Delete ${active}`
-              : 'Cannot delete entry, config, or styles'
-          }
-        >
-          Delete current file
-        </button>
-      </div>
-    </div>
-  )
 }
 
 export function Playground() {
@@ -291,8 +150,9 @@ export function Playground() {
     <div className="playground playground--fill">
       <p className="playground__intro">
         Multi-file <strong>React + TypeScript</strong> sandbox (Vite template).
-        File explorer + tabs; preview is a real Vite build in an iframe. Add{' '}
-        <code>.tsx</code> modules and import them from <code>App.tsx</code>.
+        File explorer + tabs; preview is a real Vite build in an iframe. Create
+        folders or add <code>.tsx</code> modules and import them from{' '}
+        <code>App.tsx</code>.
       </p>
 
       <div className="playground__collabBar" role="status">
@@ -345,9 +205,8 @@ export function Playground() {
           />
           <PeerCaretsOverlay selfId={collabClientId} peers={collabPeers} />
           <div className="playground__providerInner">
-            <PlaygroundToolbar />
             <SandpackLayout className="playground__sandpack">
-              <SandpackFileExplorer />
+              <PlaygroundFileExplorer />
               <SandpackCodeEditor showTabs showLineNumbers closableTabs />
               <SandpackPreview showNavigator />
             </SandpackLayout>

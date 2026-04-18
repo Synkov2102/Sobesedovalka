@@ -206,6 +206,21 @@
   cursor: not-allowed;
 }
 
+.playground__btn--compact {
+  padding-inline: 10px;
+}
+
+.playground__btn--ghost {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--text-h);
+}
+
+.playground__btn--icon {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
 .playground__btn--danger {
   border-color: color-mix(in srgb, #dc2626 45%, var(--border));
   background: color-mix(in srgb, #dc2626 12%, transparent);
@@ -241,16 +256,6 @@
   display: flex !important;
   flex-wrap: nowrap !important;
   align-items: stretch !important;
-}
-
-/* Default theme pins columns to 300px — force full height of the layout row */
-.playground--fill .sp-layout > .sp-file-explorer {
-  flex: 0 0 220px !important;
-  max-width: min(280px, 30vw) !important;
-  min-width: 160px !important;
-  height: 100% !important;
-  max-height: none !important;
-  overflow: auto !important;
 }
 
 .playground--fill .sp-layout > .sp-editor {
