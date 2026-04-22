@@ -442,7 +442,6 @@ export function PlaygroundFileExplorer({
         setFocusedPath,
         active,
         sandpack,
-        canRenameFile,
         peersByActiveFile,
         openContextMenu,
         dragItem,
@@ -455,7 +454,6 @@ export function PlaygroundFileExplorer({
     },
     [
       active,
-      canRenameFile,
       draft,
       dragItem,
       focusedPath,
@@ -477,7 +475,6 @@ export function PlaygroundFileExplorer({
         setFocusedPath,
         dropTargetPath,
         draft,
-        canRenameFolder,
         toggleFolder,
         dragItem,
         setDragItem,
@@ -489,7 +486,6 @@ export function PlaygroundFileExplorer({
       })
     },
     [
-      canRenameFolder,
       collapsedFolders,
       draft,
       dragItem,
@@ -538,6 +534,16 @@ export function PlaygroundFileExplorer({
           : null}
         {tree.folders.map((folder) => renderFolder(folder, 0))}
         {tree.files.map((file) => renderFile(file, 0))}
+        <div
+          className={
+            dropTargetPath === '/'
+              ? 'playground__rootDropZone playground__rootDropZone--bottom is-drop-target'
+              : 'playground__rootDropZone playground__rootDropZone--bottom'
+          }
+          onDragOver={handleRootDragOver}
+          onDragLeave={handleRootDragLeave}
+          onDrop={handleRootDrop}
+        />
       </div>
 
       <PlaygroundContextMenu

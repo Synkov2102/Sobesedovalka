@@ -115,10 +115,6 @@ export function useExplorerFsOps({
 
   const moveFilePath = useCallback(
     (fromPath: string, targetParentPath: string, nextName?: string) => {
-      if (!canRenameFile(fromPath)) {
-        return null
-      }
-
       const source = sandpack.files[fromPath]
       if (!source) {
         return null
@@ -173,7 +169,6 @@ export function useExplorerFsOps({
     },
     [
       active,
-      canRenameFile,
       filePathSet,
       filePaths,
       mergeFolderPaths,
@@ -187,10 +182,6 @@ export function useExplorerFsOps({
 
   const moveFolderPath = useCallback(
     (fromPath: string, targetParentPath: string, nextName?: string) => {
-      if (!canRenameFolder(fromPath)) {
-        return null
-      }
-
       if (targetParentPath === fromPath || isPathInFolder(targetParentPath, fromPath)) {
         return null
       }
@@ -266,7 +257,6 @@ export function useExplorerFsOps({
     },
     [
       active,
-      canRenameFolder,
       deleteSandpackFiles,
       filePathSet,
       filePaths,

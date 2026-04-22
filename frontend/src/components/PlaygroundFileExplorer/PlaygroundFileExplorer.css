@@ -41,8 +41,19 @@
   border-radius: 999px;
 }
 
+.playground__rootDropZone--bottom {
+  position: relative;
+  height: 200px;
+  margin: 4px 8px 0;
+  border-radius: 12px;
+}
+
 .playground__rootDropZone.is-drop-target {
   background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.playground__rootDropZone--bottom.is-drop-target {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 .playground__treeGroup {

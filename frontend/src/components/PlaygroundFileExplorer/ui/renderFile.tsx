@@ -21,7 +21,6 @@ export function renderFile({
   setFocusedPath,
   active,
   sandpack,
-  canRenameFile,
   peersByActiveFile,
   openContextMenu,
   dragItem,
@@ -38,7 +37,6 @@ export function renderFile({
   setFocusedPath: Dispatch<SetStateAction<string>>
   active: string
   sandpack: SandpackLike
-  canRenameFile: (path: string) => boolean
   peersByActiveFile: Map<string, CollabPeerDTO[]>
   openContextMenu: (event: MouseEvent<HTMLElement>, target: ContextMenuTarget) => void
   dragItem: DragItem | null
@@ -57,7 +55,7 @@ export function renderFile({
   const parentPath = getParentPath(file.path)
   const filePeers = peersByActiveFile.get(file.path) ?? []
 
-  const draggable = canRenameFile(file.path)
+  const draggable = true
 
   function handleClick() {
     sandpack.openFile(file.path)
@@ -65,10 +63,6 @@ export function renderFile({
   }
 
   function handleDragStart(event: React.DragEvent<HTMLButtonElement>) {
-    if (!draggable) {
-      event.preventDefault()
-      return
-    }
     event.dataTransfer.effectAllowed = 'move'
     event.dataTransfer.setData('text/plain', file.path)
     setDragItem({ kind: 'file', path: file.path })

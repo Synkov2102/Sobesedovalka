@@ -16,7 +16,6 @@ export function renderFolder({
   setFocusedPath,
   dropTargetPath,
   draft,
-  canRenameFolder,
   toggleFolder,
   dragItem,
   setDragItem,
@@ -33,7 +32,6 @@ export function renderFolder({
   setFocusedPath: Dispatch<SetStateAction<string>>
   dropTargetPath: string | null
   draft: ExplorerDraft | null
-  canRenameFolder: (path: string) => boolean
   toggleFolder: (folderPath: string) => void
   dragItem: DragItem | null
   setDragItem: Dispatch<SetStateAction<DragItem | null>>
@@ -47,7 +45,7 @@ export function renderFolder({
     const collapsed = collapsedFolders.includes(node.path)
     const isFocused = focusedPath === node.path
     const isDropTarget = dropTargetPath === node.path
-    const draggable = canRenameFolder(node.path)
+    const draggable = node.path !== '/'
 
     function handleClick() {
       toggleFolder(node.path)
