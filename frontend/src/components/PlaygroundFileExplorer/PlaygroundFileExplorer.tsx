@@ -3,7 +3,6 @@ import type { MouseEvent } from 'react'
 import { useSandpack } from '@codesandbox/sandpack-react'
 import { useCollabFs } from '../CollabSync'
 import type { CollabPeerDTO } from '../../collab/collab.types'
-import { peerAccentRgbCss, peerAccentRgbaCss } from '../../collab/peerColor'
 import { normalizeSandpackFilePath } from '../../collab/sandpackPaths'
 import { VITE_REACT_TS_PROTECTED } from './constants/playgroundFileExplorer.constants'
 import { useClearDropTargetWhenNoDrag } from './hooks/useDragDropUiSync'
@@ -37,6 +36,11 @@ import {
   splitFileName,
 } from './utils/paths'
 import './PlaygroundFileExplorer.css'
+import {
+  renderDraftRow as renderDraftRowUi,
+} from './ui/renderDraftRow'
+import { renderFile as renderFileUi } from './ui/renderFile'
+import { renderFolder as renderFolderUi } from './ui/renderFolder'
 
 function FileTypeIcon({ filePath }: { filePath: string }) {
   const spec = getFileIconSpec(filePath)
@@ -568,156 +572,39 @@ export function PlaygroundFileExplorer({
         return null
       }
 
-      return (
-        <div
-          className="playground__treeRow playground__treeRow--draft"
-          style={{ paddingLeft: `${depth * 16 + 12}px` }}
-        >
-          {draft.kind === 'folder' ? (
-            <span className="playground__treeIcon">{'>'}</span>
-          ) : (
-            <FileTypeIcon filePath={`/${draft.value || 'NewFile.tsx'}`} />
-          )}
-          <input
-            ref={editorInputRef}
-            className="playground__input playground__input--tree"
-            value={draft.value}
-            onChange={(e) =>
-              setDraft((prev) =>
-                prev ? { ...prev, value: e.target.value } : prev,
-              )
-            }
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                commitDraft()
-              }
-              if (e.key === 'Escape') {
-                cancelDraft()
-              }
-            }}
-            placeholder={
-              draft.mode === 'create'
-                ? draft.kind === 'file'
-                  ? 'Widget.tsx or ui/Button'
-                  : 'components/ui'
-                : draft.kind === 'file'
-                  ? 'Widget.tsx'
-                  : 'components'
-            }
-            spellCheck={false}
-            autoFocus
-          />
-        </div>
-      )
+      return renderDraftRowUi({
+        depth,
+        draft,
+        editorInputRef,
+        setDraft,
+        commitDraft,
+        cancelDraft,
+        FileTypeIcon,
+      })
     },
     [cancelDraft, commitDraft, draft],
   )
 
   const renderFile = useCallback(
     (file: ExplorerFileNode, depth: number) => {
-      if (
-        draft?.mode === 'rename' &&
-        draft.kind === 'file' &&
-        draft.path === file.path
-      ) {
-        return <div key={file.path}>{renderDraftRow(depth)}</div>
-      }
-
-      const isFocused = focusedPath === file.path
-      const isActive = file.path === active
-      const parentPath = getParentPath(file.path)
-      const filePeers = peersByActiveFile.get(file.path) ?? []
-
-      return (
-        <div
-          key={file.path}
-          className="playground__treeRow"
-          style={{ paddingLeft: `${depth * 16 + 12}px` }}
-        >
-          <button
-            type="button"
-            draggable={canRenameFile(file.path)}
-            className={
-              isActive
-                ? 'playground__treeItem playground__treeItem--file is-active'
-                : isFocused
-                  ? 'playground__treeItem playground__treeItem--file is-focused'
-                  : 'playground__treeItem playground__treeItem--file'
-            }
-            onClick={() => {
-              sandpack.openFile(file.path)
-              setFocusedPath(file.path)
-            }}
-            onDragStart={(event) => {
-              if (!canRenameFile(file.path)) {
-                event.preventDefault()
-                return
-              }
-              event.dataTransfer.effectAllowed = 'move'
-              event.dataTransfer.setData('text/plain', file.path)
-              setDragItem({ kind: 'file', path: file.path })
-              setFocusedPath(file.path)
-            }}
-            onDragEnd={() => {
-              setDragItem(null)
-              setDropTargetPath(null)
-            }}
-            onDragOver={(event) => {
-              if (!dragItem) {
-                return
-              }
-              if (
-                dragItem.kind === 'folder' &&
-                (parentPath === dragItem.path ||
-                  isPathInFolder(parentPath, dragItem.path))
-              ) {
-                return
-              }
-              event.preventDefault()
-              event.dataTransfer.dropEffect = 'move'
-              setDropTargetPath(parentPath)
-            }}
-            onDragLeave={() => {
-              setDropTargetPath((prev) => (prev === parentPath ? null : prev))
-            }}
-            onDrop={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              handleDropToFolder(parentPath)
-            }}
-            onContextMenu={(event) =>
-              openContextMenu(event, { kind: 'file', path: file.path })
-            }
-            title={file.path}
-          >
-            <FileTypeIcon filePath={file.path} />
-            <span className="playground__treeName">{file.name}</span>
-            {filePeers.length > 0 ? (
-              <span
-                className="playground__filePeerDots"
-                aria-label={`Открыто: ${filePeers.map((p) => p.displayName).join(', ')}`}
-              >
-                {filePeers.map((p) => {
-                  const fill = peerAccentRgbCss(p)
-                  const ring = peerAccentRgbaCss(p, 0.42)
-                  return (
-                    <span
-                      key={p.clientId}
-                      className="playground__filePeerDot"
-                      style={{
-                        background: fill,
-                        boxShadow: `0 0 0 1px ${ring}`,
-                      }}
-                      title={p.displayName}
-                    />
-                  )
-                })}
-              </span>
-            ) : null}
-          </button>
-        </div>
-      )
+      return renderFileUi({
+        file,
+        depth,
+        draft,
+        focusedPath,
+        setFocusedPath,
+        active,
+        sandpack,
+        canRenameFile,
+        peersByActiveFile,
+        openContextMenu,
+        dragItem,
+        setDragItem,
+        setDropTargetPath,
+        handleDropToFolder,
+        renderDraftRowAtDepth: renderDraftRow,
+        FileTypeIcon,
+      })
     },
     [
       active,
@@ -735,100 +622,24 @@ export function PlaygroundFileExplorer({
 
   const renderFolder = useCallback(
     function renderFolderRecursive(folder: ExplorerFolderNode, depth: number) {
-      const collapsed = collapsedFolders.includes(folder.path)
-      const isFocused = focusedPath === folder.path
-      const isDropTarget = dropTargetPath === folder.path
-
-      return (
-        <div key={folder.path} className="playground__treeGroup">
-          {draft?.mode === 'rename' &&
-          draft.kind === 'folder' &&
-          draft.path === folder.path ? (
-            renderDraftRow(depth)
-          ) : (
-            <div
-              className="playground__treeRow playground__treeRow--folder"
-              style={{ paddingLeft: `${depth * 16 + 12}px` }}
-            >
-              <button
-                type="button"
-                draggable={canRenameFolder(folder.path)}
-                className={
-                  isDropTarget
-                    ? 'playground__treeItem playground__treeItem--folder is-drop-target'
-                    : isFocused
-                      ? 'playground__treeItem playground__treeItem--folder is-focused'
-                      : 'playground__treeItem playground__treeItem--folder'
-                }
-                onClick={() => {
-                  toggleFolder(folder.path)
-                  setFocusedPath(folder.path)
-                }}
-                onDragStart={(event) => {
-                  if (!canRenameFolder(folder.path)) {
-                    event.preventDefault()
-                    return
-                  }
-                  event.dataTransfer.effectAllowed = 'move'
-                  event.dataTransfer.setData('text/plain', folder.path)
-                  setDragItem({ kind: 'folder', path: folder.path })
-                  setFocusedPath(folder.path)
-                }}
-                onDragEnd={() => {
-                  setDragItem(null)
-                  setDropTargetPath(null)
-                }}
-                onDragOver={(event) => {
-                  if (!dragItem) {
-                    return
-                  }
-                  if (
-                    dragItem.kind === 'folder' &&
-                    (dragItem.path === folder.path ||
-                      isPathInFolder(folder.path, dragItem.path))
-                  ) {
-                    return
-                  }
-                  event.preventDefault()
-                  event.dataTransfer.dropEffect = 'move'
-                  setDropTargetPath(folder.path)
-                }}
-                onDragLeave={() => {
-                  setDropTargetPath((prev) =>
-                    prev === folder.path ? null : prev,
-                  )
-                }}
-                onDrop={(event) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  handleDropToFolder(folder.path)
-                }}
-                onContextMenu={(event) =>
-                  openContextMenu(event, { kind: 'folder', path: folder.path })
-                }
-                title={folder.path}
-              >
-                <span className="playground__treeIcon">
-                  {collapsed ? '>' : 'v'}
-                </span>
-                <span className="playground__treeName">{folder.name}</span>
-              </button>
-            </div>
-          )}
-
-          {collapsed ? null : (
-            <>
-              {draft?.mode === 'create' && draft.parentPath === folder.path
-                ? renderDraftRow(depth + 1)
-                : null}
-              {folder.folders.map((child) =>
-                renderFolderRecursive(child, depth + 1),
-              )}
-              {folder.files.map((file) => renderFile(file, depth + 1))}
-            </>
-          )}
-        </div>
-      )
+      return renderFolderUi({
+        folder,
+        depth,
+        collapsedFolders,
+        focusedPath,
+        setFocusedPath,
+        dropTargetPath,
+        draft,
+        canRenameFolder,
+        toggleFolder,
+        dragItem,
+        setDragItem,
+        setDropTargetPath,
+        handleDropToFolder,
+        openContextMenu,
+        renderDraftRowAtDepth: renderDraftRow,
+        renderFileAtDepth: renderFile,
+      })
     },
     [
       canRenameFolder,
