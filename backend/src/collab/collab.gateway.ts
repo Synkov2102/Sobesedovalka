@@ -19,6 +19,52 @@ import { randomDisplayName } from './collab-names';
 import { CollabMongoRepository } from './collab-mongo.repository';
 import type { RoomPeer } from './collab.types';
 
+type CollabSnapshot = {
+  files: Record<string, string>;
+  folders: string[];
+};
+
+function normalizeFolderPath(path: string): string {
+  const normalized = path.trim().replace(/\\/g, '/');
+  if (!normalized) {
+    return '/';
+  }
+  const trimmed = normalized.replace(/^\/+/, '').replace(/\/+$/, '');
+  if (!trimmed) {
+    return '/';
+  }
+  return `/${trimmed}`;
+}
+
+function deriveFolderPaths(
+  files: Record<string, string>,
+  folders: Iterable<string>,
+): string[] {
+  const out = new Set<string>();
+
+  for (const rawFolder of folders) {
+    const folderPath = normalizeFolderPath(rawFolder);
+    if (folderPath !== '/') {
+      out.add(folderPath);
+    }
+  }
+
+  for (const filePath of Object.keys(files)) {
+    const parts = normalizeSandpackFilePath(filePath)
+      .replace(/^\/+/, '')
+      .split('/')
+      .filter(Boolean);
+    if (parts.length <= 1) {
+      continue;
+    }
+    for (let i = 0; i < parts.length - 1; i += 1) {
+      out.add(`/${parts.slice(0, i + 1).join('/')}`);
+    }
+  }
+
+  return Array.from(out).sort((a, b) => a.localeCompare(b));
+}
+
 /** Collab files + roster: MongoDB only (see `MONGODB_URI`). */
 @WebSocketGateway({
   cors: {
@@ -35,6 +81,7 @@ export class CollabGateway implements OnGatewayDisconnect {
   constructor(private readonly mongoRepo: CollabMongoRepository) {}
 
   private readonly roomFiles = new Map<string, Map<string, string>>();
+  private readonly roomFolders = new Map<string, Set<string>>();
   /** room -> clientId -> peer */
   private readonly roomPeers = new Map<string, Map<string, RoomPeer>>();
   /** socket.id -> { room, clientId } */
@@ -211,32 +258,7 @@ export class CollabGateway implements OnGatewayDisconnect {
   handleAnnounce(
     @MessageBody() body: { room?: string; files?: Record<string, string> },
   ): void {
-    const room = typeof body?.room === 'string' ? body.room : '';
-    const files = body?.files;
-    if (!room || !files || typeof files !== 'object') {
-      return;
-    }
-    if (!this.roomFiles.has(room)) {
-      this.roomFiles.set(room, new Map());
-    }
-    const m = this.roomFiles.get(room)!;
-    /**
-     * Full merge only for an empty room (first session / cold storage).
-     * After refresh, the client still sends the default template before snapshot
-     * is applied — overwriting persisted paths would wipe saved code.
-     */
-    if (m.size === 0) {
-      for (const [k, v] of Object.entries(files)) {
-        m.set(k, v);
-      }
-    } else {
-      for (const [k, v] of Object.entries(files)) {
-        if (!m.has(k)) {
-          m.set(k, v);
-        }
-      }
-    }
-    this.persistFilesAfterAnnounce(room);
+    void body;
   }
 
   @SubscribeMessage('collab-file')
@@ -251,7 +273,10 @@ export class CollabGateway implements OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
   ): void {
     const room = typeof body?.room === 'string' ? body.room : '';
-    const path = typeof body?.path === 'string' ? body.path : '';
+    const path =
+      typeof body?.path === 'string'
+        ? normalizeSandpackFilePath(body.path)
+        : '';
     const content = typeof body?.content === 'string' ? body.content : '';
     const from = typeof body?.from === 'string' ? body.from : '';
     if (!room || !path) {
@@ -264,7 +289,7 @@ export class CollabGateway implements OnGatewayDisconnect {
     void this.mongoRepo
       .upsertFile(room, path, content)
       .catch((e: unknown) => this.logger.warn(String(e)));
-    client.to(room).emit('collab-file', { path, content, from });
+    this.server.to(room).emit('collab-file', { path, content, from });
   }
 
   @SubscribeMessage('collab-remove')
@@ -274,7 +299,10 @@ export class CollabGateway implements OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
   ): void {
     const room = typeof body?.room === 'string' ? body.room : '';
-    const path = typeof body?.path === 'string' ? body.path : '';
+    const path =
+      typeof body?.path === 'string'
+        ? normalizeSandpackFilePath(body.path)
+        : '';
     const from = typeof body?.from === 'string' ? body.from : '';
     if (!room || !path) {
       return;
@@ -286,7 +314,25 @@ export class CollabGateway implements OnGatewayDisconnect {
     void this.mongoRepo
       .deleteFile(room, path)
       .catch((e: unknown) => this.logger.warn(String(e)));
-    client.to(room).emit('collab-remove', { path, from });
+    this.server.to(room).emit('collab-remove', { path, from });
+  }
+
+  @SubscribeMessage('collab-folders-sync')
+  handleFoldersSync(
+    @MessageBody() body: { room?: string; folders?: string[] },
+  ): void {
+    const room = typeof body?.room === 'string' ? body.room : '';
+    const folders = Array.isArray(body?.folders) ? body.folders : [];
+    if (!room) {
+      return;
+    }
+
+    const normalized = deriveFolderPaths(this.snapshotFiles(room), folders);
+    this.roomFolders.set(room, new Set(normalized));
+    void this.mongoRepo
+      .replaceRoomFolders(room, normalized)
+      .catch((e: unknown) => this.logger.warn(String(e)));
+    this.server.to(room).emit('collab-folders', normalized);
   }
 
   private broadcastRoster(room: string): void {
@@ -326,12 +372,27 @@ export class CollabGateway implements OnGatewayDisconnect {
     });
   }
 
-  private snapshot(room: string): Record<string, string> {
+  private snapshot(room: string): CollabSnapshot {
+    return {
+      files: this.snapshotFiles(room),
+      folders: this.snapshotFolders(room),
+    };
+  }
+
+  private snapshotFiles(room: string): Record<string, string> {
     const m = this.roomFiles.get(room);
     if (!m) {
       return {};
     }
     return Object.fromEntries(m);
+  }
+
+  private snapshotFolders(room: string): string[] {
+    const folders = this.roomFolders.get(room);
+    return deriveFolderPaths(
+      this.snapshotFiles(room),
+      folders ? Array.from(folders) : [],
+    );
   }
 
   private collectRoomHueSet(room: string, excludeClientId?: string): Set<number> {
@@ -353,23 +414,14 @@ export class CollabGateway implements OnGatewayDisconnect {
 
   private async ensureRoomHydrated(room: string): Promise<void> {
     const cur = this.roomFiles.get(room);
-    if (cur && cur.size > 0) {
+    const folderCur = this.roomFolders.get(room);
+    if (cur && folderCur) {
       return;
     }
     await this.mongoRepo.ensureRoom(room);
     const loaded = await this.mongoRepo.loadFiles(room);
-    if (Object.keys(loaded).length === 0) {
-      if (!this.roomFiles.has(room)) {
-        this.roomFiles.set(room, new Map());
-      }
-      return;
-    }
     this.roomFiles.set(room, new Map(Object.entries(loaded)));
-  }
-
-  private persistFilesAfterAnnounce(room: string): void {
-    void this.mongoRepo
-      .replaceRoomFiles(room, this.snapshot(room))
-      .catch((e: unknown) => this.logger.warn(String(e)));
+    const loadedFolders = await this.mongoRepo.loadFolders(room);
+    this.roomFolders.set(room, new Set(deriveFolderPaths(loaded, loadedFolders)));
   }
 }

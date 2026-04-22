@@ -163,26 +163,27 @@ export function Playground() {
           files={sandpackFiles}
           options={sandpackOptions}
         >
-          <PlaygroundCollabBar
-            room={collabRoom}
-            collabPeers={collabPeers}
-            collabCount={collabCount}
-            myDisplayName={myDisplayName}
-          />
           <CollabSync
             room={collabRoom}
             clientId={collabClientId}
             onRoster={onCollabRoster}
             onWelcome={onCollabWelcome}
-          />
-          <PeerCaretsOverlay selfId={collabClientId} peers={collabPeers} />
-          <div className="playground__providerInner">
-            <SandpackLayout className="playground__sandpack">
-              <PlaygroundFileExplorer collabPeers={collabPeers} />
-              <SandpackCodeEditor showTabs showLineNumbers closableTabs />
-              <SandpackPreview showNavigator />
-            </SandpackLayout>
-          </div>
+          >
+            <PlaygroundCollabBar
+              room={collabRoom}
+              collabPeers={collabPeers}
+              collabCount={collabCount}
+              myDisplayName={myDisplayName}
+            />
+            <PeerCaretsOverlay selfId={collabClientId} peers={collabPeers} />
+            <div className="playground__providerInner">
+              <SandpackLayout className="playground__sandpack">
+                <PlaygroundFileExplorer collabPeers={collabPeers} />
+                <SandpackCodeEditor showTabs showLineNumbers closableTabs />
+                <SandpackPreview showNavigator />
+              </SandpackLayout>
+            </div>
+          </CollabSync>
         </SandpackProvider>
       </div>
     </div>

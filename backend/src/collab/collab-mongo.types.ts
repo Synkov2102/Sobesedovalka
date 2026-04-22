@@ -6,6 +6,13 @@ export type CollabFileDoc = {
   updatedAt: Date;
 };
 
+/** One explicit folder path per room (unique roomId + path). */
+export type CollabFolderDoc = {
+  roomId: string;
+  path: string;
+  updatedAt: Date;
+};
+
 /** One participant per room (unique roomId + clientId). */
 export type CollabPeerDoc = {
   roomId: string;

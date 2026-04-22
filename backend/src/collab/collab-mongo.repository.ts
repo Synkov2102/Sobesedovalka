@@ -8,12 +8,14 @@ import {
 } from './collab-color';
 import type {
   CollabFileDoc,
+  CollabFolderDoc,
   CollabPeerDoc,
   CollabRoomDoc,
 } from './collab-mongo.types';
 import type { RoomPeer } from './collab.types';
 
 const FILES = 'collab_files';
+const FOLDERS = 'collab_folders';
 const PEERS = 'collab_peers';
 const ROOMS = 'collab_rooms';
 
@@ -35,6 +37,10 @@ export class CollabMongoRepository implements OnModuleInit {
     return this.mongo.getDb().collection<CollabFileDoc>(FILES);
   }
 
+  private folders(): Collection<CollabFolderDoc> {
+    return this.mongo.getDb().collection<CollabFolderDoc>(FOLDERS);
+  }
+
   private peers(): Collection<CollabPeerDoc> {
     return this.mongo.getDb().collection<CollabPeerDoc>(PEERS);
   }
@@ -45,6 +51,7 @@ export class CollabMongoRepository implements OnModuleInit {
 
   private async ensureIndexes(): Promise<void> {
     await this.files().createIndex({ roomId: 1, path: 1 }, { unique: true });
+    await this.folders().createIndex({ roomId: 1, path: 1 }, { unique: true });
     await this.peers().createIndex({ roomId: 1, clientId: 1 }, { unique: true });
     await this.rooms().createIndex({ updatedAt: -1 });
   }
@@ -68,6 +75,11 @@ export class CollabMongoRepository implements OnModuleInit {
       out[r.path] = r.content;
     }
     return out;
+  }
+
+  async loadFolders(roomId: string): Promise<string[]> {
+    const rows = await this.folders().find({ roomId }).toArray();
+    return rows.map((row) => row.path);
   }
 
   async upsertFile(
@@ -114,6 +126,36 @@ export class CollabMongoRepository implements OnModuleInit {
       },
     }));
     await this.files().bulkWrite(ops);
+  }
+
+  async replaceRoomFolders(roomId: string, folders: string[]): Promise<void> {
+    const paths = Array.from(
+      new Set(
+        folders
+          .map((path) => path.trim())
+          .filter((path) => path.length > 0 && path !== '/'),
+      ),
+    );
+    const now = new Date();
+    if (paths.length === 0) {
+      await this.folders().deleteMany({ roomId });
+      return;
+    }
+    await this.folders().deleteMany({ roomId, path: { $nin: paths } });
+    const ops = paths.map((path) => ({
+      updateOne: {
+        filter: { roomId, path },
+        update: {
+          $set: {
+            roomId,
+            path,
+            updatedAt: now,
+          },
+        },
+        upsert: true,
+      },
+    }));
+    await this.folders().bulkWrite(ops);
   }
 
   private docToPeer(d: CollabPeerDoc): RoomPeer {
