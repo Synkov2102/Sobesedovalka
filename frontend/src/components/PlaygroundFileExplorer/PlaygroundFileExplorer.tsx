@@ -9,6 +9,7 @@ import { useClearDropTargetWhenNoDrag } from './hooks/useDragDropUiSync'
 import { useCopiedPathReset } from './hooks/useCopiedPathReset'
 import { useContextMenuDismiss } from './hooks/useContextMenuDismiss'
 import { useDraftInputFocus } from './hooks/useDraftInputFocus'
+import { useExplorerFsOps } from './hooks/useExplorerFsOps'
 import type {
   ContextMenuState,
   ContextMenuTarget,
@@ -20,11 +21,10 @@ import type {
 import { writeToClipboard } from './utils/clipboard'
 import { defaultComponentSource } from './utils/source'
 import { buildExplorerTree } from './utils/tree'
-import { getFileIconSpec } from './utils/fileIcon'
+import { buildPeersByActiveFile } from './utils/peers'
 import {
   getEntryName,
   getFolderAncestors,
-  getFoldersForFile,
   getParentPath,
   isPathInFolder,
   joinEntryPath,
@@ -32,33 +32,16 @@ import {
   joinFolderWithName,
   normalizeNewFilePath,
   normalizeNewFolderPath,
-  replacePathPrefix,
-  splitFileName,
 } from './utils/paths'
+import { sortUniqueFolderPaths } from './utils/sort'
 import './PlaygroundFileExplorer.css'
 import {
   renderDraftRow as renderDraftRowUi,
 } from './ui/renderDraftRow'
 import { renderFile as renderFileUi } from './ui/renderFile'
 import { renderFolder as renderFolderUi } from './ui/renderFolder'
-
-function FileTypeIcon({ filePath }: { filePath: string }) {
-  const spec = getFileIconSpec(filePath)
-
-  return (
-    <span
-      className={`playground__fileTypeIcon playground__fileTypeIcon--${spec.tone}`}
-      title={spec.title}
-      aria-hidden="true"
-    >
-      {spec.label}
-    </span>
-  )
-}
-
-function sortPaths(paths: string[]): string[] {
-  return Array.from(new Set(paths)).sort((a, b) => a.localeCompare(b))
-}
+import { PlaygroundContextMenu } from './ui/PlaygroundContextMenu'
+import { FileTypeIcon } from './ui/FileTypeIcon'
 
 export function PlaygroundFileExplorer({
   collabPeers = [],
@@ -85,40 +68,15 @@ export function PlaygroundFileExplorer({
     [filePaths, folderPaths],
   )
 
-  const peersByActiveFile = useMemo(() => {
-    const m = new Map<string, CollabPeerDTO[]>()
-    for (const p of collabPeers) {
-      const f = normalizeSandpackFilePath(p.activeFile)
-      if (!f) {
-        continue
-      }
-      const list = m.get(f)
-      if (list) {
-        list.push(p)
-      } else {
-        m.set(f, [p])
-      }
-    }
-    for (const list of m.values()) {
-      list.sort((a, b) =>
-        a.displayName.localeCompare(b.displayName, undefined, {
-          sensitivity: 'base',
-        }),
-      )
-    }
-    return m
-  }, [collabPeers])
-
-  const sortUniqueFolderPaths = useCallback((paths: string[]) => {
-    return Array.from(
-      new Set(paths.filter((path) => path.length > 0 && path !== '/')),
-    ).sort((a, b) => a.localeCompare(b))
-  }, [])
+  const peersByActiveFile = useMemo(
+    () => buildPeersByActiveFile(collabPeers),
+    [collabPeers],
+  )
 
   const mergeFolderPaths = useCallback(
     (extraPaths: string[]) =>
       sortUniqueFolderPaths([...folderPaths, ...extraPaths]),
-    [folderPaths, sortUniqueFolderPaths],
+    [folderPaths],
   )
 
   const canRenameFile = useCallback(
@@ -191,237 +149,22 @@ export function PlaygroundFileExplorer({
     )
   }, [])
 
-  const deleteSandpackFiles = useCallback(
-    (paths: string[]) => {
-      const entries = paths
-        .filter((path) => sandpack.files[path])
-        .sort((a, b) => b.length - a.length)
-
-      entries.forEach((path, index) => {
-        sandpack.deleteFile(path, index === entries.length - 1)
-      })
-    },
-    [sandpack],
-  )
-
-  const deletePath = useCallback(
-    (target: ContextMenuTarget) => {
-      if (target.kind === 'root') {
-        return
-      }
-
-      if (target.kind === 'file') {
-        if (!canRenameFile(target.path)) {
-          return
-        }
-        removeFile(target.path)
-        sandpack.deleteFile(target.path, true)
-        closeContextMenu()
-        return
-      }
-
-      if (!canRenameFolder(target.path)) {
-        return
-      }
-
-      const nextFolders = folderPaths.filter(
-        (path) => !isPathInFolder(path, target.path),
-      )
-      const entries = filePaths.filter((path) => isPathInFolder(path, target.path))
-
-      entries.forEach((path) => removeFile(path))
-      syncFolders(nextFolders, filePaths.filter((path) => !isPathInFolder(path, target.path)))
-      deleteSandpackFiles(entries)
-      closeContextMenu()
-    },
-    [
-      canRenameFile,
-      canRenameFolder,
-      closeContextMenu,
-      deleteSandpackFiles,
-      filePaths,
-      folderPaths,
-      removeFile,
-      syncFolders,
-    ],
-  )
-
-  const moveFilePath = useCallback(
-    (fromPath: string, targetParentPath: string, nextName?: string) => {
-      if (!canRenameFile(fromPath)) {
-        return null
-      }
-
-      const source = sandpack.files[fromPath]
-      if (!source) {
-        return null
-      }
-
-      const sourceParentPath = getParentPath(fromPath)
-      const fileName = nextName ?? getEntryName(fromPath)
-      const initialPath = joinFileWithName(targetParentPath, fileName)
-      if (!initialPath || initialPath === fromPath) {
-        return null
-      }
-
-      let nextPath = initialPath
-      if (filePathSet.has(nextPath)) {
-        if (nextName) {
-          return null
-        }
-        const { stem, extension } = splitFileName(fileName)
-        let suffix = 1
-
-        do {
-          const candidateName = `${stem}(${suffix})${extension}`
-          const candidatePath = joinFileWithName(
-            targetParentPath,
-            candidateName,
-          )
-          if (!candidatePath) {
-            return null
-          }
-          nextPath = candidatePath
-          suffix += 1
-        } while (filePathSet.has(nextPath))
-      }
-
-      const nextFilePaths = sortPaths(
-        filePaths.filter((path) => path !== fromPath).concat(nextPath),
-      )
-      const nextFolders = mergeFolderPaths([
-        ...getFoldersForFile(nextPath),
-        ...(sourceParentPath === '/' ? [] : getFolderAncestors(sourceParentPath)),
-      ])
-      saveFile(nextPath, source.code ?? '')
-      removeFile(fromPath)
-      syncFolders(nextFolders, nextFilePaths)
-      sandpack.addFile(nextPath, source.code ?? '', false)
-      sandpack.deleteFile(fromPath, true)
-
-      if (active === fromPath) {
-        sandpack.openFile(nextPath)
-      }
-
-      setFocusedPath(nextPath)
-      return nextPath
-    },
-    [
-      active,
-      canRenameFile,
-      filePathSet,
-      filePaths,
-      mergeFolderPaths,
-      removeFile,
-      sandpack,
-      saveFile,
-      syncFolders,
-    ],
-  )
-
-  const moveFolderPath = useCallback(
-    (fromPath: string, targetParentPath: string, nextName?: string) => {
-      if (!canRenameFolder(fromPath)) {
-        return null
-      }
-
-      if (
-        targetParentPath === fromPath ||
-        isPathInFolder(targetParentPath, fromPath)
-      ) {
-        return null
-      }
-
-      const nextFolderPath = joinFolderWithName(
-        targetParentPath,
-        nextName ?? getEntryName(fromPath),
-      )
-      if (!nextFolderPath || nextFolderPath === fromPath) {
-        return null
-      }
-
-      const entriesToMove = filePaths.filter((path) => isPathInFolder(path, fromPath))
-      const movingSet = new Set(entriesToMove)
-      const nextEntries = entriesToMove.map((path) =>
-        replacePathPrefix(path, fromPath, nextFolderPath),
-      )
-
-      if (
-        nextEntries.some((path) => filePathSet.has(path) && !movingSet.has(path))
-      ) {
-        return null
-      }
-
-      const movingFolders = folderPaths.filter((path) =>
-        isPathInFolder(path, fromPath),
-      )
-      const movingFolderSet = new Set(movingFolders)
-      if (
-        folderPathSet.has(nextFolderPath) &&
-        !movingFolderSet.has(nextFolderPath)
-      ) {
-        return null
-      }
-
-      const nextFolders = sortUniqueFolderPaths([
-        ...folderPaths
-          .filter((path) => !isPathInFolder(path, fromPath))
-          .map((path) => path),
-        ...movingFolders.map((path) =>
-          replacePathPrefix(path, fromPath, nextFolderPath),
-        ),
-        ...getFolderAncestors(nextFolderPath),
-      ])
-
-      const nextFilePaths = sortPaths(
-        filePaths.map((path) =>
-          isPathInFolder(path, fromPath)
-            ? replacePathPrefix(path, fromPath, nextFolderPath)
-            : path,
-        ),
-      )
-      entriesToMove.forEach((path) => {
-        const nextPath = replacePathPrefix(path, fromPath, nextFolderPath)
-        saveFile(nextPath, sandpack.files[path]?.code ?? '')
-      })
-      entriesToMove.forEach((path) => removeFile(path))
-      syncFolders(nextFolders, nextFilePaths)
-      entriesToMove.forEach((path) => {
-        const nextPath = replacePathPrefix(path, fromPath, nextFolderPath)
-        sandpack.addFile(nextPath, sandpack.files[path]?.code ?? '', false)
-      })
-      deleteSandpackFiles(entriesToMove)
-
-      if (active && isPathInFolder(active, fromPath)) {
-        sandpack.openFile(replacePathPrefix(active, fromPath, nextFolderPath))
-      }
-
-      setCollapsedFolders((prev) => {
-        const mapped = prev.map((path) =>
-          isPathInFolder(path, fromPath)
-            ? replacePathPrefix(path, fromPath, nextFolderPath)
-            : path,
-        )
-        return Array.from(new Set(mapped))
-      })
-      setFocusedPath(nextFolderPath)
-      return nextFolderPath
-    },
-    [
-      active,
-      canRenameFolder,
-      deleteSandpackFiles,
-      filePathSet,
-      filePaths,
-      folderPathSet,
-      folderPaths,
-      removeFile,
-      sandpack,
-      saveFile,
-      sortUniqueFolderPaths,
-      syncFolders,
-    ],
-  )
+  const { deletePath, moveFilePath, moveFolderPath } = useExplorerFsOps({
+    sandpack,
+    active,
+    filePaths,
+    folderPaths,
+    filePathSet,
+    folderPathSet,
+    syncFolders,
+    saveFile,
+    removeFile,
+    canRenameFile,
+    canRenameFolder,
+    closeContextMenu,
+    setFocusedPath,
+    setCollapsedFolders,
+  })
 
   const commitDraft = useCallback(() => {
     if (!draft) {
@@ -538,10 +281,89 @@ export function PlaygroundFileExplorer({
     [],
   )
 
+  const openRootContextMenu = useCallback(
+    (event: MouseEvent<HTMLElement>) => {
+      openContextMenu(event, { kind: 'root', path: '/' })
+    },
+    [openContextMenu],
+  )
+
   useDraftInputFocus(draft, editorInputRef, draftSelectKeyRef)
   useContextMenuDismiss(!!contextMenu, closeContextMenu)
   useClearDropTargetWhenNoDrag(dragItem, setDropTargetPath)
   useCopiedPathReset(copiedPath, setCopiedPath)
+
+  const handleContextMenuPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      event.stopPropagation()
+    },
+    [],
+  )
+
+  const preventNativeContextMenu = useCallback(
+    (event: React.MouseEvent) => {
+      event.preventDefault()
+    },
+    [],
+  )
+
+  const handleCreateFileInRoot = useCallback(() => {
+    startCreate('file', '/')
+  }, [startCreate])
+
+  const handleCreateFolderInRoot = useCallback(() => {
+    startCreate('folder', '/')
+  }, [startCreate])
+
+  const handleCreateFileInContextFolder = useCallback(() => {
+    if (!contextMenu || contextMenu.target.kind !== 'folder') {
+      return
+    }
+    startCreate('file', contextMenu.target.path)
+  }, [contextMenu, startCreate])
+
+  const handleCreateFolderInContextFolder = useCallback(() => {
+    if (!contextMenu || contextMenu.target.kind !== 'folder') {
+      return
+    }
+    startCreate('folder', contextMenu.target.path)
+  }, [contextMenu, startCreate])
+
+  const handleRenameContextFolder = useCallback(() => {
+    if (!contextMenu || contextMenu.target.kind !== 'folder') {
+      return
+    }
+    startRename('folder', contextMenu.target.path)
+  }, [contextMenu, startRename])
+
+  const handleDeleteContextFolder = useCallback(() => {
+    if (!contextMenu || contextMenu.target.kind !== 'folder') {
+      return
+    }
+    deletePath(contextMenu.target)
+  }, [contextMenu, deletePath])
+
+  const handleCopyPathContextFile = useCallback(() => {
+    if (!contextMenu || contextMenu.target.kind !== 'file') {
+      return
+    }
+    void copyPath(contextMenu.target.path)
+    closeContextMenu()
+  }, [closeContextMenu, contextMenu, copyPath])
+
+  const handleRenameContextFile = useCallback(() => {
+    if (!contextMenu || contextMenu.target.kind !== 'file') {
+      return
+    }
+    startRename('file', contextMenu.target.path)
+  }, [contextMenu, startRename])
+
+  const handleDeleteContextFile = useCallback(() => {
+    if (!contextMenu || contextMenu.target.kind !== 'file') {
+      return
+    }
+    deletePath(contextMenu.target)
+  }, [contextMenu, deletePath])
 
   const handleDropToFolder = useCallback(
     (targetFolderPath: string) => {
@@ -564,6 +386,31 @@ export function PlaygroundFileExplorer({
       setDropTargetPath(null)
     },
     [dragItem, moveFilePath, moveFolderPath],
+  )
+
+  const handleRootDragOver = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      if (!dragItem) {
+        return
+      }
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'move'
+      setDropTargetPath('/')
+    },
+    [dragItem],
+  )
+
+  const handleRootDragLeave = useCallback(() => {
+    setDropTargetPath((prev) => (prev === '/' ? null : prev))
+  }, [])
+
+  const handleRootDrop = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      event.preventDefault()
+      event.stopPropagation()
+      handleDropToFolder('/')
+    },
+    [handleDropToFolder],
   )
 
   const renderDraftRow = useCallback(
@@ -659,9 +506,7 @@ export function PlaygroundFileExplorer({
   return (
     <div
       className="playground__fileExplorer sp-file-explorer"
-      onContextMenu={(event) =>
-        openContextMenu(event, { kind: 'root', path: '/' })
-      }
+      onContextMenu={openRootContextMenu}
     >
       <div className="playground__fileExplorerHeader">
         <div>
@@ -684,22 +529,9 @@ export function PlaygroundFileExplorer({
               ? 'playground__rootDropZone is-drop-target'
               : 'playground__rootDropZone'
           }
-          onDragOver={(event) => {
-            if (!dragItem) {
-              return
-            }
-            event.preventDefault()
-            event.dataTransfer.dropEffect = 'move'
-            setDropTargetPath('/')
-          }}
-          onDragLeave={() => {
-            setDropTargetPath((prev) => (prev === '/' ? null : prev))
-          }}
-          onDrop={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            handleDropToFolder('/')
-          }}
+          onDragOver={handleRootDragOver}
+          onDragLeave={handleRootDragLeave}
+          onDrop={handleRootDrop}
         />
         {draft?.mode === 'create' && draft.parentPath === '/'
           ? renderDraftRow(0)
@@ -708,99 +540,22 @@ export function PlaygroundFileExplorer({
         {tree.files.map((file) => renderFile(file, 0))}
       </div>
 
-      {contextMenu ? (
-        <div
-          className="playground__contextMenu"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onPointerDown={(event) => event.stopPropagation()}
-          onContextMenu={(event) => event.preventDefault()}
-        >
-          {contextMenu.target.kind === 'root' ? (
-            <>
-              <button
-                type="button"
-                className="playground__contextMenuItem"
-                onClick={() => startCreate('file', '/')}
-              >
-                New File
-              </button>
-              <button
-                type="button"
-                className="playground__contextMenuItem"
-                onClick={() => startCreate('folder', '/')}
-              >
-                New Folder
-              </button>
-            </>
-          ) : null}
-
-          {contextMenu.target.kind === 'folder' ? (
-            <>
-              <button
-                type="button"
-                className="playground__contextMenuItem"
-                onClick={() => startCreate('file', contextMenu.target.path)}
-              >
-                New File
-              </button>
-              <button
-                type="button"
-                className="playground__contextMenuItem"
-                onClick={() => startCreate('folder', contextMenu.target.path)}
-              >
-                New Folder
-              </button>
-              <button
-                type="button"
-                className="playground__contextMenuItem"
-                onClick={() => startRename('folder', contextMenu.target.path)}
-                disabled={!canRenameFolder(contextMenu.target.path)}
-              >
-                Rename
-              </button>
-              <button
-                type="button"
-                className="playground__contextMenuItem is-danger"
-                onClick={() => deletePath(contextMenu.target)}
-                disabled={!canRenameFolder(contextMenu.target.path)}
-              >
-                Delete
-              </button>
-            </>
-          ) : null}
-
-          {contextMenu.target.kind === 'file' ? (
-            <>
-              <button
-                type="button"
-                className="playground__contextMenuItem"
-                onClick={() => {
-                  void copyPath(contextMenu.target.path)
-                  closeContextMenu()
-                }}
-              >
-                Copy Path
-              </button>
-              <button
-                type="button"
-                className="playground__contextMenuItem"
-                onClick={() => startRename('file', contextMenu.target.path)}
-                disabled={!canRenameFile(contextMenu.target.path)}
-              >
-                Rename
-              </button>
-              <button
-                type="button"
-                className="playground__contextMenuItem is-danger"
-                onClick={() => deletePath(contextMenu.target)}
-                disabled={!canRenameFile(contextMenu.target.path)}
-              >
-                Delete
-              </button>
-            </>
-          ) : null}
-        </div>
-      ) : null}
+      <PlaygroundContextMenu
+        contextMenu={contextMenu}
+        handleContextMenuPointerDown={handleContextMenuPointerDown}
+        preventNativeContextMenu={preventNativeContextMenu}
+        handleCreateFileInRoot={handleCreateFileInRoot}
+        handleCreateFolderInRoot={handleCreateFolderInRoot}
+        handleCreateFileInContextFolder={handleCreateFileInContextFolder}
+        handleCreateFolderInContextFolder={handleCreateFolderInContextFolder}
+        handleRenameContextFolder={handleRenameContextFolder}
+        handleDeleteContextFolder={handleDeleteContextFolder}
+        handleCopyPathContextFile={handleCopyPathContextFile}
+        handleRenameContextFile={handleRenameContextFile}
+        handleDeleteContextFile={handleDeleteContextFile}
+        canRenameFolder={canRenameFolder}
+        canRenameFile={canRenameFile}
+      />
     </div>
   )
 }
