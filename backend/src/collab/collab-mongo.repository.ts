@@ -158,6 +158,16 @@ export class CollabMongoRepository implements OnModuleInit {
     await this.folders().bulkWrite(ops);
   }
 
+  async seedRoom(
+    roomId: string,
+    files: Record<string, string>,
+    folders: string[],
+  ): Promise<void> {
+    await this.ensureRoom(roomId);
+    await this.replaceRoomFiles(roomId, files);
+    await this.replaceRoomFolders(roomId, folders);
+  }
+
   private docToPeer(d: CollabPeerDoc): RoomPeer {
     const hueRaw =
       typeof d.hue === 'number' && Number.isFinite(d.hue)

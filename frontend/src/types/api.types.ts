@@ -4,12 +4,27 @@ export type Task = {
   createdAt: string
 }
 
+export type TaskPresetFile = {
+  path: string
+  content: string
+}
+
+export type TaskPreset = {
+  id: string
+  title: string
+  description: string
+  files: Record<string, string>
+  folders: string[]
+  createdAt: string
+  updatedAt: string
+}
+
 export type HealthPayload = {
   ok: boolean
   service: string
 }
 
-export type MainTab = 'playground' | 'api'
+export type MainTab = 'playground' | 'api' | 'presets'
 
 export type AuthUser = {
   id: string

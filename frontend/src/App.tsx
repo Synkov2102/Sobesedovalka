@@ -1,6 +1,7 @@
 import { Suspense, lazy, useState, type FormEvent } from 'react'
 import { useAuth } from './auth/AuthContext'
 import { AuthScreen } from './auth/AuthScreen'
+import { TaskPresetsPanel } from './components/TaskPresetsPanel'
 import './App.css'
 import { useBackendDemo } from './hooks/useBackendDemo'
 import type { AuthUser, MainTab } from './types/api.types'
@@ -76,6 +77,14 @@ function AppMain({ user, logout }: AppMainProps) {
         >
           API &amp; tasks
         </button>
+        <button
+          type="button"
+          className={`app__navBtn${mainTab === 'presets' ? ' app__navBtn--active' : ''}`}
+          aria-current={mainTab === 'presets' ? 'page' : undefined}
+          onClick={() => setMainTab('presets')}
+        >
+          Пресеты
+        </button>
       </nav>
 
       {mainTab === 'playground' ? (
@@ -89,6 +98,8 @@ function AppMain({ user, logout }: AppMainProps) {
             </Suspense>
           </div>
         </section>
+      ) : mainTab === 'presets' ? (
+        <TaskPresetsPanel />
       ) : (
         <>
           <section className="panel" aria-label="API status">
