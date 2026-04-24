@@ -1,14 +1,21 @@
 import { Suspense, lazy, useState, type FormEvent } from 'react'
+import { useAuth } from './auth/AuthContext'
+import { AuthScreen } from './auth/AuthScreen'
 import './App.css'
 import { useBackendDemo } from './hooks/useBackendDemo'
-import type { MainTab } from './types/api.types'
+import type { AuthUser, MainTab } from './types/api.types'
 
 const Playground = lazy(async () => {
   const m = await import('./components/Playground')
   return { default: m.Playground }
 })
 
-function App() {
+type AppMainProps = {
+  user: AuthUser
+  logout: () => void
+}
+
+function AppMain({ user, logout }: AppMainProps) {
   const [mainTab, setMainTab] = useState<MainTab>('playground')
   const {
     health,
@@ -27,6 +34,9 @@ function App() {
     void handleAdd(e)
   }
 
+  const accountLabel =
+    user.email ?? user.phone ?? user.id.slice(0, 8)
+
   return (
     <div className={mainTab === 'playground' ? 'app app--sandbox' : 'app'}>
       <header className="app__header">
@@ -36,6 +46,16 @@ function App() {
           React host → <code>/api</code> proxy → NestJS. Includes a{' '}
           <strong>multi-file React (Vite + TS) sandbox</strong> with live
           preview and a small REST demo. Extend per the interviewer’s prompt.
+        </p>
+        <p className="app__account">
+          <span className="app__accountLabel">{accountLabel}</span>
+          <button
+            type="button"
+            className="btn btn--ghost btn--small"
+            onClick={() => logout()}
+          >
+            Выйти
+          </button>
         </p>
       </header>
 
@@ -162,6 +182,24 @@ function App() {
       ) : null}
     </div>
   )
+}
+
+function App() {
+  const { user, ready, logout } = useAuth()
+
+  if (!ready) {
+    return (
+      <div className="app">
+        <p className="panel__muted">Загрузка сессии…</p>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return <AuthScreen />
+  }
+
+  return <AppMain user={user} logout={logout} />
 }
 
 export default App

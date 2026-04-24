@@ -315,3 +315,45 @@
 .app__footer code {
   font-size: 14px;
 }
+
+.app__account {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 12px 0 0;
+  font-size: 14px;
+}
+
+.app__accountLabel {
+  opacity: 0.9;
+}
+
+.app--sandbox .app__account {
+  margin-top: 6px;
+}
+
+.authScreen {
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.authScreen__tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.authScreen__panel {
+  max-width: 440px;
+}
+
+.authScreen__hint {
+  margin: -4px 0 12px;
+  font-size: 14px;
+}
+
+.authScreen .form .btn {
+  margin-top: 8px;
+}

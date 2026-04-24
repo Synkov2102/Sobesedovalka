@@ -10,3 +10,14 @@ export type HealthPayload = {
 }
 
 export type MainTab = 'playground' | 'api'
+
+export type AuthUser = {
+  id: string
+  email?: string
+  phone?: string
+}
+
+export type AuthLoginResponse = {
+  accessToken: string
+  user: AuthUser
+}
