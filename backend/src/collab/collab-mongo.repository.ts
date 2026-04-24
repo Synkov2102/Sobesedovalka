@@ -77,6 +77,12 @@ export class CollabMongoRepository implements OnModuleInit {
     return out;
   }
 
+  /** True if this room was seeded with at least one Sandpack file (preset start-room). */
+  async roomHasFiles(roomId: string): Promise<boolean> {
+    const doc = await this.files().findOne({ roomId }, { projection: { _id: 1 } });
+    return doc !== null;
+  }
+
   async loadFolders(roomId: string): Promise<string[]> {
     const rows = await this.folders().find({ roomId }).toArray();
     return rows.map((row) => row.path);

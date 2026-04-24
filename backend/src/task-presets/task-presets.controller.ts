@@ -29,6 +29,11 @@ export class TaskPresetsController {
     return this.service.list(req.user.userId);
   }
 
+  @Get('collab-room/:roomId')
+  collabRoomStatus(@Param('roomId') roomId: string) {
+    return this.service.collabRoomReady(roomId);
+  }
+
   @Post()
   create(@Req() req: AuthedRequest, @Body() dto: CreateTaskPresetDto) {
     return this.service.create(req.user.userId, dto);

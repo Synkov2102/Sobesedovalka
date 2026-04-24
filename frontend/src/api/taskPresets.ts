@@ -81,3 +81,13 @@ export async function startRoomFromPreset(
   }
   return (await res.json()) as { roomId: string }
 }
+
+export async function fetchCollabRoomReady(roomId: string): Promise<boolean> {
+  const enc = encodeURIComponent(roomId)
+  const res = await apiFetch(`/task-presets/collab-room/${enc}`)
+  if (!res.ok) {
+    throw new Error(await readApiError(res))
+  }
+  const body = (await res.json()) as { ready?: unknown }
+  return body.ready === true
+}

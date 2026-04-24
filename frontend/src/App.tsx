@@ -11,13 +11,26 @@ const Playground = lazy(async () => {
   return { default: m.Playground }
 })
 
+function readMainTabFromUrl(): MainTab {
+  const raw = new URLSearchParams(window.location.search).get('tab')
+  return raw === 'api' || raw === 'presets' ? raw : 'playground'
+}
+
+function replaceUrlForInvalidRoom() {
+  const url = new URL(window.location.href)
+  url.searchParams.delete('room')
+  url.searchParams.set('tab', 'presets')
+  url.searchParams.set('presetFocus', 'create')
+  window.history.replaceState({}, '', url.pathname + url.search)
+}
+
 type AppMainProps = {
   user: AuthUser
   logout: () => void
 }
 
 function AppMain({ user, logout }: AppMainProps) {
-  const [mainTab, setMainTab] = useState<MainTab>('playground')
+  const [mainTab, setMainTab] = useState<MainTab>(readMainTabFromUrl)
   const {
     health,
     healthError,
@@ -94,7 +107,12 @@ function AppMain({ user, logout }: AppMainProps) {
             <Suspense
               fallback={<p className="panel__muted">Loading editor…</p>}
             >
-              <Playground />
+              <Playground
+                onInvalidExplicitRoom={() => {
+                  replaceUrlForInvalidRoom()
+                  setMainTab('presets')
+                }}
+              />
             </Suspense>
           </div>
         </section>

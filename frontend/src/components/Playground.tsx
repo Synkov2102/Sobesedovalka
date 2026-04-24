@@ -5,6 +5,7 @@ import {
   SandpackCodeEditor,
   SandpackPreview,
 } from '@codesandbox/sandpack-react'
+import { fetchCollabRoomReady } from '../api/taskPresets'
 import type { CollabWelcomePayload, CollabPeerDTO } from '../collab/collab.types'
 import { CollabSync } from './CollabSync'
 import { PeerCaretsOverlay } from './PeerCaretsOverlay'
@@ -16,14 +17,25 @@ import {
 } from '../sandbox/defaultFiles'
 import './Playground.css'
 
+type PlaygroundProps = {
+  onInvalidExplicitRoom?: () => void
+}
 
-function useCollabRoom(): string {
-  return useMemo(() => {
-    const raw = new URLSearchParams(window.location.search).get('room')?.trim()
-    const base = raw && raw.length > 0 ? raw : 'default'
-    const safe = base.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64)
-    return safe.length > 0 ? safe : 'default'
-  }, [])
+type ParsedCollabRoom =
+  | { kind: 'implicit'; roomId: string }
+  | { kind: 'explicit'; roomId: string }
+  | { kind: 'explicit_invalid' }
+
+function parseCollabRoomFromLocation(): ParsedCollabRoom {
+  const raw = new URLSearchParams(window.location.search).get('room')?.trim()
+  if (!raw) {
+    return { kind: 'implicit', roomId: 'default' }
+  }
+  const safe = raw.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64)
+  if (!safe) {
+    return { kind: 'explicit_invalid' }
+  }
+  return { kind: 'explicit', roomId: safe }
 }
 
 function useStableCollabClientId(): string {
@@ -58,9 +70,59 @@ function useSystemTheme(): 'light' | 'dark' {
   return mode
 }
 
-export function Playground() {
+export function Playground({ onInvalidExplicitRoom }: PlaygroundProps) {
   const theme = useSystemTheme()
-  const collabRoom = useCollabRoom()
+  const parsedRoom = useMemo(() => parseCollabRoomFromLocation(), [])
+  const [roomAccess, setRoomAccess] = useState<'ready' | 'checking' | 'blocked'>(() => {
+    if (parsedRoom.kind === 'implicit') {
+      return 'ready'
+    }
+    if (parsedRoom.kind === 'explicit_invalid') {
+      return 'blocked'
+    }
+    return 'checking'
+  })
+
+  useEffect(() => {
+    if (parsedRoom.kind === 'implicit') {
+      return
+    }
+    if (parsedRoom.kind === 'explicit_invalid') {
+      onInvalidExplicitRoom?.()
+      return
+    }
+    let alive = true
+    void (async () => {
+      try {
+        const ok = await fetchCollabRoomReady(parsedRoom.roomId)
+        if (!alive) {
+          return
+        }
+        if (!ok) {
+          onInvalidExplicitRoom?.()
+          setRoomAccess('blocked')
+          return
+        }
+        setRoomAccess('ready')
+      } catch {
+        if (!alive) {
+          return
+        }
+        setRoomAccess('ready')
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [parsedRoom, onInvalidExplicitRoom])
+
+  const collabRoom =
+    parsedRoom.kind === 'implicit'
+      ? parsedRoom.roomId
+      : parsedRoom.kind === 'explicit' && roomAccess === 'ready'
+        ? parsedRoom.roomId
+        : 'default'
+
   const collabClientId = useStableCollabClientId()
   const [collabPeers, setCollabPeers] = useState<CollabPeerDTO[]>([])
   const [collabCount, setCollabCount] = useState(0)
@@ -94,6 +156,22 @@ export function Playground() {
     }),
     [],
   )
+
+  if (parsedRoom.kind !== 'implicit' && roomAccess === 'checking') {
+    return (
+      <div className="playground playground--fill">
+        <p className="panel__muted">Проверка ссылки комнаты…</p>
+      </div>
+    )
+  }
+
+  if (roomAccess === 'blocked') {
+    return (
+      <div className="playground playground--fill">
+        <p className="panel__muted">Комната не найдена. Открываем пресеты…</p>
+      </div>
+    )
+  }
 
   return (
     <div className="playground playground--fill">

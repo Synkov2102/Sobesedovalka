@@ -199,6 +199,18 @@ export function TaskPresetsPanel() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('presetFocus') === 'create') {
+      requestAnimationFrame(() => {
+        document.getElementById('preset-create-form')?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        })
+      })
+    }
+  }, [])
+
+  useEffect(() => {
     let alive = true
     void (async () => {
       try {
@@ -319,7 +331,7 @@ export function TaskPresetsPanel() {
       {error ? <p className="panel__error">{error}</p> : null}
 
       <div className="presetPanel__grid">
-        <div className="presetPanel__column">
+        <div className="presetPanel__column" id="preset-create-form">
           <h3 className="presetPanel__sectionTitle">Создать пресет</h3>
           <DraftEditor
             draft={draft}

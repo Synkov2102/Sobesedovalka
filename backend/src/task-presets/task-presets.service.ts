@@ -101,6 +101,15 @@ export class TaskPresetsService {
     }
   }
 
+  async collabRoomReady(roomId: string): Promise<{ ready: boolean }> {
+    const safe = roomId.trim().replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+    if (!safe) {
+      return { ready: false };
+    }
+    const ready = await this.collabRepo.roomHasFiles(safe);
+    return { ready };
+  }
+
   async startRoom(
     userId: string,
     id: string,
