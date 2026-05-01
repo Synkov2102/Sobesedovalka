@@ -1,0 +1,23 @@
+# Переменные: .env рядом с этим файлом на сервере (шаблон — .env.example в репозитории).
+services:
+  backend:
+    image: ghcr.io/synkov2102/sobesedovalka-backend:main
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      PORT: ${PORT:-3000}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      MONGODB_URI: ${MONGODB_URI:?Set MONGODB_URI in .env}
+    ports:
+      - "8081:3000"
+
+  frontend:
+    image: ghcr.io/synkov2102/sobesedovalka-frontend:main
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"

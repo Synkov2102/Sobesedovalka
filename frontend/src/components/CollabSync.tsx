@@ -25,9 +25,13 @@ import { getFoldersForFile, normalizeNewFolderPath } from './PlaygroundFileExplo
 
 function collabWsUrl(): string {
   const raw = import.meta.env.VITE_COLLAB_WS_URL
-  return typeof raw === 'string' && raw.length > 0
-    ? raw
-    : 'http://localhost:3000'
+  if (typeof raw === 'string' && raw.length > 0) {
+    return raw
+  }
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin
+  }
+  return 'http://localhost:3000'
 }
 
 function getFileCode(f: unknown): string | undefined {

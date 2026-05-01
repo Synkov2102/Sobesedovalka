@@ -1,0 +1,29 @@
+# Переменные: .env в корне репозитория (шаблон — .env.example).
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: sobesedovalka-backend:local
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: ${PORT:-3000}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      JWT_SECRET: ${JWT_SECRET:-local-dev-jwt-secret-min-32-chars!!}
+      MONGODB_URI: ${MONGODB_URI:?Set MONGODB_URI in .env — see .env.example}
+    ports:
+      - "8081:3000"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: sobesedovalka-frontend:local
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
