@@ -16,6 +16,7 @@ import {
 } from './collab-color';
 import { normalizeSandpackFilePath } from './sandpack-paths';
 import { randomDisplayName } from './collab-names';
+import { corsCredentialsFromEnv, corsOriginFromEnv } from '../cors-env';
 import { CollabMongoRepository } from './collab-mongo.repository';
 import type { RoomPeer } from './collab.types';
 
@@ -68,8 +69,8 @@ function deriveFolderPaths(
 /** Collab files + roster: MongoDB only (see `MONGODB_URI`). */
 @WebSocketGateway({
   cors: {
-    origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
-    credentials: true,
+    origin: corsOriginFromEnv(),
+    credentials: corsCredentialsFromEnv(),
   },
 })
 export class CollabGateway implements OnGatewayDisconnect {
