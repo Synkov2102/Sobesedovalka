@@ -1,4 +1,5 @@
-# Переменные: .env рядом с этим файлом на сервере (шаблон — .env.example в репозитории).
+# На сервере: .env.production рядом с этим файлом (JWT_SECRET, MONGODB_URI, при необходимости PORT, CORS_ORIGIN).
+# Секреты только в env_file — не дублируйте ${VAR:?} в environment: Compose читает .env для подстановки, не .env.production.
 services:
   backend:
     image: ghcr.io/synkov2102/sobesedovalka-backend:main
@@ -9,8 +10,6 @@ services:
       NODE_ENV: production
       PORT: ${PORT:-3000}
       CORS_ORIGIN: ${CORS_ORIGIN:-*}
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
-      MONGODB_URI: ${MONGODB_URI:?Set MONGODB_URI in .env}
     ports:
       - "8081:3000"
 
