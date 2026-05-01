@@ -15,6 +15,7 @@ import {
   DEFAULT_SANDBOX_APP,
   DEFAULT_SANDBOX_STYLES,
 } from '../sandbox/defaultFiles'
+import { v4 as uuidv4 } from 'uuid'
 import './Playground.css'
 
 type PlaygroundProps = {
@@ -44,12 +45,13 @@ function useStableCollabClientId(): string {
     try {
       let id = sessionStorage.getItem(k)
       if (!id) {
-        id = crypto.randomUUID()
+        // `crypto.randomUUID` только в secure context (HTTPS или localhost); прод по HTTP на IP — нет.
+        id = uuidv4()
         sessionStorage.setItem(k, id)
       }
       return id
     } catch {
-      return crypto.randomUUID()
+      return uuidv4()
     }
   }, [])
 }
