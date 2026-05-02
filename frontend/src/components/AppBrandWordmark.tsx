@@ -1,5 +1,7 @@
 import ButtonBase from '@mui/material/ButtonBase'
+import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
+import { BrandMark } from './BrandMark'
 
 const wordmarkSx = {
   fontWeight: 800,
@@ -7,6 +9,7 @@ const wordmarkSx = {
   color: 'primary.main',
   fontSize: { xs: '1.2rem', sm: '1.4rem' },
   lineHeight: 1.15,
+  m: 0,
 } as const
 
 type AppBrandWordmarkProps = {
@@ -16,9 +19,21 @@ type AppBrandWordmarkProps = {
 
 export function AppBrandWordmark({ onNavigateHome }: AppBrandWordmarkProps) {
   const label = (
-    <Typography component="span" variant="h6" sx={wordmarkSx}>
-      Собесилка
-    </Typography>
+    <Stack
+      direction="row"
+      spacing={0}
+      sx={{ alignItems: 'center' }}
+    >
+      <BrandMark
+        sx={{
+          width: { xs: 30, sm: 34 },
+          height: { xs: 30, sm: 34 },
+        }}
+      />
+      <Typography component="span" variant="h6" sx={wordmarkSx}>
+        Собесилка
+      </Typography>
+    </Stack>
   )
 
   if (onNavigateHome) {
@@ -31,6 +46,9 @@ export function AppBrandWordmark({ onNavigateHome }: AppBrandWordmarkProps) {
           px: 0.5,
           mx: -0.5,
           '&:hover .MuiTypography-root': {
+            color: 'primary.light',
+          },
+          '&:hover svg': {
             color: 'primary.light',
           },
         }}
