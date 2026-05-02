@@ -1,9 +1,3 @@
-export type Task = {
-  id: string
-  title: string
-  createdAt: string
-}
-
 export type TaskPresetFile = {
   path: string
   content: string
@@ -19,12 +13,14 @@ export type TaskPreset = {
   updatedAt: string
 }
 
-export type HealthPayload = {
-  ok: boolean
-  service: string
-}
+export type MainTab = 'rooms' | 'presets'
 
-export type MainTab = 'playground' | 'api' | 'presets'
+export type CollabRoomSummary = {
+  roomId: string
+  title: string
+  createdAt: string
+  updatedAt: string
+}
 
 export type AuthUser = {
   id: string

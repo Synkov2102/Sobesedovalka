@@ -54,6 +54,7 @@ export class CollabMongoRepository implements OnModuleInit {
     await this.folders().createIndex({ roomId: 1, path: 1 }, { unique: true });
     await this.peers().createIndex({ roomId: 1, clientId: 1 }, { unique: true });
     await this.rooms().createIndex({ updatedAt: -1 });
+    await this.rooms().createIndex({ ownerUserId: 1, updatedAt: -1 });
   }
 
   async ensureRoom(roomId: string): Promise<void> {
@@ -172,6 +173,65 @@ export class CollabMongoRepository implements OnModuleInit {
     await this.ensureRoom(roomId);
     await this.replaceRoomFiles(roomId, files);
     await this.replaceRoomFolders(roomId, folders);
+  }
+
+  /**
+   * Привязать комнату к пользователю (после seedRoom).
+   * Поля title / sourcePresetId опциональны.
+   */
+  async setRoomOwnership(
+    roomId: string,
+    meta: {
+      ownerUserId: string;
+      title?: string;
+      sourcePresetId?: string;
+    },
+  ): Promise<void> {
+    const now = new Date();
+    const $set: Record<string, unknown> = {
+      updatedAt: now,
+      ownerUserId: meta.ownerUserId,
+    };
+    if (meta.title !== undefined) {
+      $set.title = meta.title;
+    }
+    if (meta.sourcePresetId !== undefined) {
+      $set.sourcePresetId = meta.sourcePresetId;
+    }
+    const result = await this.rooms().updateOne({ _id: roomId }, { $set });
+    if (result.matchedCount === 0) {
+      await this.ensureRoom(roomId);
+      await this.rooms().updateOne({ _id: roomId }, { $set });
+    }
+  }
+
+  async listRoomsByOwner(userId: string): Promise<CollabRoomDoc[]> {
+    return this.rooms()
+      .find({ ownerUserId: userId })
+      .sort({ updatedAt: -1 })
+      .toArray();
+  }
+
+  /**
+   * Удаляет комнату и все связанные файлы, папки и пиры.
+   * Только если владелец комнаты совпадает с userId.
+   */
+  async deleteRoomForOwner(
+    roomId: string,
+    userId: string,
+  ): Promise<'deleted' | 'not_found' | 'forbidden'> {
+    const room = await this.rooms().findOne({ _id: roomId });
+    if (!room) {
+      return 'not_found';
+    }
+    if (room.ownerUserId !== userId) {
+      return 'forbidden';
+    }
+    await this.files().deleteMany({ roomId });
+    await this.folders().deleteMany({ roomId });
+    await this.peers().deleteMany({ roomId });
+    await this.rooms().deleteOne({ _id: roomId });
+    return 'deleted';
   }
 
   private docToPeer(d: CollabPeerDoc): RoomPeer {

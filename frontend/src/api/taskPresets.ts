@@ -26,12 +26,24 @@ type TaskPresetPayload = {
   files: TaskPresetFile[]
 }
 
+function encPresetId(id: string): string {
+  return encodeURIComponent(id)
+}
+
 export async function fetchTaskPresets(): Promise<TaskPreset[]> {
   const res = await apiFetch('/task-presets')
   if (!res.ok) {
     throw new Error(await readApiError(res))
   }
   return (await res.json()) as TaskPreset[]
+}
+
+export async function fetchTaskPreset(id: string): Promise<TaskPreset> {
+  const res = await apiFetch(`/task-presets/${encPresetId(id)}`)
+  if (!res.ok) {
+    throw new Error(await readApiError(res))
+  }
+  return (await res.json()) as TaskPreset
 }
 
 export async function createTaskPreset(
@@ -52,7 +64,7 @@ export async function updateTaskPreset(
   id: string,
   body: Partial<TaskPresetPayload>,
 ): Promise<TaskPreset> {
-  const res = await apiFetch(`/task-presets/${id}`, {
+  const res = await apiFetch(`/task-presets/${encPresetId(id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -64,7 +76,9 @@ export async function updateTaskPreset(
 }
 
 export async function deleteTaskPreset(id: string): Promise<void> {
-  const res = await apiFetch(`/task-presets/${id}`, { method: 'DELETE' })
+  const res = await apiFetch(`/task-presets/${encPresetId(id)}`, {
+    method: 'DELETE',
+  })
   if (!res.ok && res.status !== 404) {
     throw new Error(await readApiError(res))
   }
@@ -73,7 +87,7 @@ export async function deleteTaskPreset(id: string): Promise<void> {
 export async function startRoomFromPreset(
   id: string,
 ): Promise<{ roomId: string }> {
-  const res = await apiFetch(`/task-presets/${id}/start-room`, {
+  const res = await apiFetch(`/task-presets/${encPresetId(id)}/start-room`, {
     method: 'POST',
   })
   if (!res.ok) {

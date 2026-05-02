@@ -1,4 +1,5 @@
 import { Logger } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import {
   ConnectedSocket,
   MessageBody,
@@ -17,7 +18,9 @@ import {
 import { normalizeSandpackFilePath } from './sandpack-paths';
 import { randomDisplayName } from './collab-names';
 import { corsCredentialsFromEnv, corsOriginFromEnv } from '../cors-env';
+import { UsersRepository } from '../auth/users.repository';
 import { CollabMongoRepository } from './collab-mongo.repository';
+import { collabPublicDisplayName } from './collab-user-display';
 import type { RoomPeer } from './collab.types';
 
 type CollabSnapshot = {
@@ -79,7 +82,11 @@ export class CollabGateway implements OnGatewayDisconnect {
   @WebSocketServer()
   server!: Server;
 
-  constructor(private readonly mongoRepo: CollabMongoRepository) {}
+  constructor(
+    private readonly mongoRepo: CollabMongoRepository,
+    private readonly jwt: JwtService,
+    private readonly users: UsersRepository,
+  ) {}
 
   private readonly roomFiles = new Map<string, Map<string, string>>();
   private readonly roomFolders = new Map<string, Set<string>>();
@@ -135,6 +142,9 @@ export class CollabGateway implements OnGatewayDisconnect {
     if (!room || !clientId) {
       return;
     }
+
+    const authDisplayName = await this.resolveAuthDisplayName(client);
+
     await this.ensureRoomHydrated(room);
     void client.join(room);
     this.socketMeta.set(client.id, { room, clientId });
@@ -155,7 +165,7 @@ export class CollabGateway implements OnGatewayDisconnect {
     if (!peer) {
       const used = this.collectRoomHueSet(room);
       peer = {
-        displayName: randomDisplayName(),
+        displayName: authDisplayName ?? randomDisplayName(),
         activeFile: '',
         hue: pickHueUniqueInRoom(used, clientId),
         anchorLine: 1,
@@ -169,6 +179,9 @@ export class CollabGateway implements OnGatewayDisconnect {
       const h = peer.hue != null ? normHue(peer.hue) : null;
       if (h == null || used.has(h)) {
         peer.hue = pickHueUniqueInRoom(used, clientId);
+      }
+      if (authDisplayName) {
+        peer.displayName = authDisplayName;
       }
     }
 
@@ -411,6 +424,40 @@ export class CollabGateway implements OnGatewayDisconnect {
       }
     }
     return used;
+  }
+
+  private socketHandshakeToken(client: Socket): string | null {
+    const auth = client.handshake.auth as Record<string, unknown> | undefined;
+    const fromAuth = auth?.token;
+    if (typeof fromAuth === 'string' && fromAuth.trim()) {
+      return fromAuth.trim();
+    }
+    const h = client.handshake.headers.authorization;
+    if (typeof h === 'string' && /^Bearer\s+/i.test(h)) {
+      const t = h.replace(/^Bearer\s+/i, '').trim();
+      return t.length > 0 ? t : null;
+    }
+    return null;
+  }
+
+  /** Имя из JWT + профиля пользователя; без токена — гость со случайным ником на клиенте. */
+  private async resolveAuthDisplayName(client: Socket): Promise<string | null> {
+    const token = this.socketHandshakeToken(client);
+    if (!token) {
+      return null;
+    }
+    try {
+      const payload = await this.jwt.verifyAsync<{ sub?: string }>(token);
+      const sub =
+        typeof payload?.sub === 'string' ? payload.sub.trim() : '';
+      if (!sub) {
+        return null;
+      }
+      const doc = await this.users.findById(sub);
+      return collabPublicDisplayName(doc);
+    } catch {
+      return null;
+    }
   }
 
   private async ensureRoomHydrated(room: string): Promise<void> {

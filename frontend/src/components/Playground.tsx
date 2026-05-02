@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useTheme } from '@mui/material/styles'
 import {
   SandpackProvider,
   SandpackLayout,
@@ -6,7 +7,7 @@ import {
   SandpackPreview,
 } from '@codesandbox/sandpack-react'
 import { fetchCollabRoomReady } from '../api/taskPresets'
-import type { CollabWelcomePayload, CollabPeerDTO } from '../collab/collab.types'
+import type { CollabPeerDTO } from '../collab/collab.types'
 import { CollabSync } from './CollabSync'
 import { PeerCaretsOverlay } from './PeerCaretsOverlay'
 import { PlaygroundCollabBar } from './PlaygroundCollabBar'
@@ -23,14 +24,25 @@ type PlaygroundProps = {
 }
 
 type ParsedCollabRoom =
-  | { kind: 'implicit'; roomId: string }
+  | { kind: 'missing' }
   | { kind: 'explicit'; roomId: string }
   | { kind: 'explicit_invalid' }
+
+/** Sandpack/Vite в iframe использует Web Crypto в воркерах — только secure context (HTTPS или localhost). */
+function isSandpackCryptoAvailable(): boolean {
+  if (typeof window === 'undefined') {
+    return true
+  }
+  return (
+    window.isSecureContext === true &&
+    typeof globalThis.crypto?.subtle?.digest === 'function'
+  )
+}
 
 function parseCollabRoomFromLocation(): ParsedCollabRoom {
   const raw = new URLSearchParams(window.location.search).get('room')?.trim()
   if (!raw) {
-    return { kind: 'implicit', roomId: 'default' }
+    return { kind: 'missing' }
   }
   const safe = raw.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64)
   if (!safe) {
@@ -56,29 +68,13 @@ function useStableCollabClientId(): string {
   }, [])
 }
 
-function useSystemTheme(): 'light' | 'dark' {
-  const [mode, setMode] = useState<'light' | 'dark'>(() =>
-    typeof window !== 'undefined' &&
-    window.matchMedia('(prefers-color-scheme: dark)').matches
-      ? 'dark'
-      : 'light',
-  )
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-color-scheme: dark)')
-    const go = () => setMode(mq.matches ? 'dark' : 'light')
-    mq.addEventListener('change', go)
-    return () => mq.removeEventListener('change', go)
-  }, [])
-  return mode
-}
-
 export function Playground({ onInvalidExplicitRoom }: PlaygroundProps) {
-  const theme = useSystemTheme()
+  const muiTheme = useTheme()
+  const sandpackTheme = muiTheme.palette.mode
   const parsedRoom = useMemo(() => parseCollabRoomFromLocation(), [])
-  const [roomAccess, setRoomAccess] = useState<'ready' | 'checking' | 'blocked'>(() => {
-    if (parsedRoom.kind === 'implicit') {
-      return 'ready'
-    }
+  const [roomAccess, setRoomAccess] = useState<
+    'ready' | 'checking' | 'blocked'
+  >(() => {
     if (parsedRoom.kind === 'explicit_invalid') {
       return 'blocked'
     }
@@ -86,7 +82,7 @@ export function Playground({ onInvalidExplicitRoom }: PlaygroundProps) {
   })
 
   useEffect(() => {
-    if (parsedRoom.kind === 'implicit') {
+    if (parsedRoom.kind === 'missing') {
       return
     }
     if (parsedRoom.kind === 'explicit_invalid') {
@@ -118,28 +114,10 @@ export function Playground({ onInvalidExplicitRoom }: PlaygroundProps) {
     }
   }, [parsedRoom, onInvalidExplicitRoom])
 
-  const collabRoom =
-    parsedRoom.kind === 'implicit'
-      ? parsedRoom.roomId
-      : parsedRoom.kind === 'explicit' && roomAccess === 'ready'
-        ? parsedRoom.roomId
-        : 'default'
-
   const collabClientId = useStableCollabClientId()
   const [collabPeers, setCollabPeers] = useState<CollabPeerDTO[]>([])
-  const [collabCount, setCollabCount] = useState(0)
-  const [myDisplayName, setMyDisplayName] = useState<string | null>(null)
-
-  const onCollabRoster = useCallback(
-    (peers: CollabPeerDTO[], count: number) => {
-      setCollabPeers(peers)
-      setCollabCount(count)
-    },
-    [],
-  )
-
-  const onCollabWelcome = useCallback((welcome: CollabWelcomePayload) => {
-    setMyDisplayName(welcome.displayName)
+  const onCollabRoster = useCallback((peers: CollabPeerDTO[]) => {
+    setCollabPeers(peers)
   }, [])
 
   /** Stable refs — Sandpack resets all file state whenever `files` identity changes. */
@@ -159,7 +137,26 @@ export function Playground({ onInvalidExplicitRoom }: PlaygroundProps) {
     [],
   )
 
-  if (parsedRoom.kind !== 'implicit' && roomAccess === 'checking') {
+  if (parsedRoom.kind === 'missing') {
+    return (
+      <div className="playground playground--fill">
+        <p className="panel__muted">
+          Откройте комнату из списка «Комнаты» или по прямой ссылке с параметром{' '}
+          <code>?room=…</code>. Редактор без id комнаты не запускается.
+        </p>
+      </div>
+    )
+  }
+
+  if (parsedRoom.kind === 'explicit_invalid') {
+    return (
+      <div className="playground playground--fill">
+        <p className="panel__muted">Некорректный id комнаты.</p>
+      </div>
+    )
+  }
+
+  if (parsedRoom.kind === 'explicit' && roomAccess === 'checking') {
     return (
       <div className="playground playground--fill">
         <p className="panel__muted">Проверка ссылки комнаты…</p>
@@ -167,48 +164,65 @@ export function Playground({ onInvalidExplicitRoom }: PlaygroundProps) {
     )
   }
 
-  if (roomAccess === 'blocked') {
+  if (parsedRoom.kind === 'explicit' && roomAccess === 'blocked') {
     return (
       <div className="playground playground--fill">
-        <p className="panel__muted">Комната не найдена. Открываем пресеты…</p>
+        <p className="panel__muted">
+          Комната не найдена или недоступна. Возврат к списку комнат…
+        </p>
       </div>
     )
   }
 
+  if (!isSandpackCryptoAvailable()) {
+    return (
+      <div className="playground playground--fill">
+        <p className="panel__muted">
+          Редактор с живым превью (Sandpack) нуждается в{' '}
+          <strong>безопасном контексте</strong> браузера: откройте приложение по{' '}
+          <strong>HTTPS</strong> или с хоста <strong>localhost</strong>. На
+          адресе вида <code>http://IP:порт</code> у страницы нет доступа к{' '}
+          <code>crypto.subtle</code>, поэтому сборка превью падает с ошибкой про{' '}
+          <code>digest</code>.
+        </p>
+        <p className="panel__muted">
+          Для VPS обычно ставят TLS (Let&apos;s Encrypt, сертификат за обратным
+          прокси) и заходят на <code>https://ваш-домен</code>.
+        </p>
+      </div>
+    )
+  }
+
+  if (parsedRoom.kind !== 'explicit' || roomAccess !== 'ready') {
+    return null
+  }
+
+  const roomId = parsedRoom.roomId
+
   return (
     <div className="playground playground--fill">
-      <p className="playground__intro">
-        Multi-file <strong>React + TypeScript</strong> sandbox (Vite template).
-        File explorer + tabs; preview is a real Vite build in an iframe. Create
-        folders or add <code>.tsx</code> modules and import them from{' '}
-        <code>App.tsx</code>.
-      </p>
-
       <div className="playground__spWrap">
         <SandpackProvider
           template="vite-react-ts"
-          theme={theme}
+          theme={sandpackTheme}
           files={sandpackFiles}
           options={sandpackOptions}
         >
           <CollabSync
-            room={collabRoom}
+            room={roomId}
             clientId={collabClientId}
             onRoster={onCollabRoster}
-            onWelcome={onCollabWelcome}
           >
             <PlaygroundCollabBar
-              room={collabRoom}
               collabPeers={collabPeers}
-              collabCount={collabCount}
-              myDisplayName={myDisplayName}
+              selfClientId={collabClientId}
             />
             <PeerCaretsOverlay selfId={collabClientId} peers={collabPeers} />
             <div className="playground__providerInner">
               <SandpackLayout className="playground__sandpack">
                 <PlaygroundFileExplorer collabPeers={collabPeers} />
                 <SandpackCodeEditor showTabs showLineNumbers closableTabs />
-                <SandpackPreview showNavigator />
+                <SandpackPreview showNavigator showOpenInCodeSandbox={false} />
               </SandpackLayout>
             </div>
           </CollabSync>

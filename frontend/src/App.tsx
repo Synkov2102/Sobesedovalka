@@ -1,9 +1,21 @@
-import { Suspense, lazy, useState, type FormEvent } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  Box,
+  Button,
+  Paper,
+  Stack,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
+} from '@mui/material'
 import { useAuth } from './auth/AuthContext'
 import { AuthScreen } from './auth/AuthScreen'
-import { TaskPresetsPanel } from './components/TaskPresetsPanel'
-import './App.css'
-import { useBackendDemo } from './hooks/useBackendDemo'
+import { AppBrandWordmark } from './components/AppBrandWordmark'
+import { RoomsPanel } from './components/RoomsPanel'
+import { PresetCreatePage } from './components/presets/PresetCreatePage'
+import { PresetEditPage } from './components/presets/PresetEditPage'
+import { PresetListPanel } from './components/presets/PresetListPanel'
+import { appShellPageSx, editorFullScreenShellSx } from './theme/layout'
 import type { AuthUser, MainTab } from './types/api.types'
 
 const Playground = lazy(async () => {
@@ -11,16 +23,65 @@ const Playground = lazy(async () => {
   return { default: m.Playground }
 })
 
+function readRoomIdFromSearch(search: string): string | null {
+  const raw = new URLSearchParams(search).get('room')?.trim()
+  return raw ? raw : null
+}
+
 function readMainTabFromUrl(): MainTab {
   const raw = new URLSearchParams(window.location.search).get('tab')
-  return raw === 'api' || raw === 'presets' ? raw : 'playground'
+  if (raw === 'presets') {
+    return 'presets'
+  }
+  return 'rooms'
+}
+
+function migratePresetFocusToCreateUrl(): void {
+  const url = new URL(window.location.href)
+  if (url.searchParams.get('presetFocus') !== 'create') {
+    return
+  }
+  url.searchParams.delete('presetFocus')
+  url.searchParams.set('tab', 'presets')
+  url.searchParams.set('preset', 'new')
+  window.history.replaceState({}, '', url.pathname + url.search)
+}
+
+type PresetEditorRoute = 'list' | 'create' | { mode: 'edit'; id: string }
+
+function parsePresetEditorRoute(search: string): PresetEditorRoute {
+  const raw = new URLSearchParams(search).get('preset')?.trim()
+  if (!raw) {
+    return 'list'
+  }
+  if (raw === 'new') {
+    return 'create'
+  }
+  return { mode: 'edit', id: raw }
+}
+
+function normalizeLegacyUrlTabs(): void {
+  const url = new URL(window.location.href)
+  let changed = false
+  if (url.searchParams.get('tab') === 'api') {
+    url.searchParams.set('tab', 'rooms')
+    changed = true
+  }
+  if (url.searchParams.get('tab') === 'playground') {
+    url.searchParams.delete('tab')
+    changed = true
+  }
+  if (changed) {
+    window.history.replaceState({}, '', url.pathname + url.search)
+  }
 }
 
 function replaceUrlForInvalidRoom() {
   const url = new URL(window.location.href)
   url.searchParams.delete('room')
-  url.searchParams.set('tab', 'presets')
-  url.searchParams.set('presetFocus', 'create')
+  url.searchParams.set('tab', 'rooms')
+  url.searchParams.delete('presetFocus')
+  url.searchParams.delete('preset')
   window.history.replaceState({}, '', url.pathname + url.search)
 }
 
@@ -31,185 +92,297 @@ type AppMainProps = {
 
 function AppMain({ user, logout }: AppMainProps) {
   const [mainTab, setMainTab] = useState<MainTab>(readMainTabFromUrl)
-  const {
-    health,
-    healthError,
-    tasks,
-    tasksError,
-    title,
-    setTitle,
-    busy,
-    refreshHealth,
-    handleAdd,
-    handleDelete,
-  } = useBackendDemo()
+  const [navRevision, setNavRevision] = useState(0)
 
-  function onAdd(e: FormEvent) {
-    void handleAdd(e)
-  }
+  const bumpNav = useCallback(() => {
+    setNavRevision((n) => n + 1)
+  }, [])
 
-  const accountLabel =
-    user.email ?? user.phone ?? user.id.slice(0, 8)
+  useEffect(() => {
+    migratePresetFocusToCreateUrl()
+    normalizeLegacyUrlTabs()
+    setMainTab(readMainTabFromUrl())
+    bumpNav()
+  }, [bumpNav])
+
+  useEffect(() => {
+    const onPop = () => {
+      setMainTab(readMainTabFromUrl())
+      bumpNav()
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [bumpNav])
+
+  const roomId = useMemo(() => readRoomIdFromSearch(window.location.search), [navRevision])
+  const isSandbox = Boolean(roomId)
+  const presetEditorRoute = useMemo(() => {
+    if (mainTab !== 'presets') {
+      return 'list' as const
+    }
+    return parsePresetEditorRoute(window.location.search)
+  }, [mainTab, navRevision])
+  const isPresetEditor =
+    mainTab === 'presets' && presetEditorRoute !== 'list'
+  const isFullScreenEditor = isSandbox || isPresetEditor
+
+  const accountLabel = user.email ?? user.phone ?? user.id.slice(0, 8)
+
+  const commitTab = useCallback(
+    (next: MainTab) => {
+      const url = new URL(window.location.href)
+      url.searchParams.set('tab', next)
+      url.searchParams.delete('room')
+      url.searchParams.delete('preset')
+      window.history.pushState({}, '', url.pathname + url.search)
+      setMainTab(next)
+      bumpNav()
+    },
+    [bumpNav],
+  )
+
+  const navigateToPlaygroundRoom = useCallback(
+    (id: string) => {
+      const url = new URL(window.location.href)
+      url.searchParams.set('room', id)
+      url.searchParams.delete('preset')
+      window.history.pushState({}, '', url.pathname + url.search)
+      bumpNav()
+    },
+    [bumpNav],
+  )
+
+  const exitSandboxToRooms = useCallback(() => {
+    const url = new URL(window.location.href)
+    url.searchParams.delete('room')
+    url.searchParams.set('tab', 'rooms')
+    url.searchParams.delete('preset')
+    window.history.pushState({}, '', url.pathname + url.search)
+    setMainTab('rooms')
+    bumpNav()
+  }, [bumpNav])
+
+  const onInvalidRoom = useCallback(() => {
+    replaceUrlForInvalidRoom()
+    setMainTab('rooms')
+    bumpNav()
+  }, [bumpNav])
+
+  const openPresetCreate = useCallback(() => {
+    const url = new URL(window.location.href)
+    url.searchParams.set('tab', 'presets')
+    url.searchParams.set('preset', 'new')
+    url.searchParams.delete('room')
+    window.history.pushState({}, '', url.pathname + url.search)
+    setMainTab('presets')
+    bumpNav()
+  }, [bumpNav])
+
+  const openPresetEdit = useCallback(
+    (presetId: string) => {
+      const url = new URL(window.location.href)
+      url.searchParams.set('tab', 'presets')
+      url.searchParams.set('preset', presetId)
+      url.searchParams.delete('room')
+      window.history.pushState({}, '', url.pathname + url.search)
+      setMainTab('presets')
+      bumpNav()
+    },
+    [bumpNav],
+  )
+
+  const openPresetList = useCallback(() => {
+    const url = new URL(window.location.href)
+    url.searchParams.set('tab', 'presets')
+    url.searchParams.delete('preset')
+    url.searchParams.delete('room')
+    window.history.pushState({}, '', url.pathname + url.search)
+    setMainTab('presets')
+    bumpNav()
+  }, [bumpNav])
+
+  const goBrandHome = useCallback(() => {
+    if (isSandbox) {
+      exitSandboxToRooms()
+      return
+    }
+    if (isPresetEditor) {
+      openPresetList()
+      return
+    }
+    if (mainTab !== 'rooms') {
+      commitTab('rooms')
+    }
+  }, [
+    isSandbox,
+    isPresetEditor,
+    exitSandboxToRooms,
+    mainTab,
+    commitTab,
+    openPresetList,
+  ])
 
   return (
-    <div className={mainTab === 'playground' ? 'app app--sandbox' : 'app'}>
-      <header className="app__header">
-        <p className="app__eyebrow">Live coding interview</p>
-        <h1>Full-stack scaffold</h1>
-        <p className="app__lead">
-          React host → <code>/api</code> proxy → NestJS. Includes a{' '}
-          <strong>multi-file React (Vite + TS) sandbox</strong> with live
-          preview and a small REST demo. Extend per the interviewer’s prompt.
-        </p>
-        <p className="app__account">
-          <span className="app__accountLabel">{accountLabel}</span>
-          <button
-            type="button"
-            className="btn btn--ghost btn--small"
-            onClick={() => logout()}
+    <Box
+      className={
+        isSandbox ? 'app--sandbox' : isPresetEditor ? 'app--preset-editor' : undefined
+      }
+      sx={{
+        ...(isFullScreenEditor ? editorFullScreenShellSx : appShellPageSx),
+      }}
+    >
+      <Box
+        component="header"
+        sx={{
+          mb: isFullScreenEditor ? 1 : 2,
+          flexShrink: 0,
+        }}
+      >
+        <Stack
+          direction="row"
+          spacing={2}
+          sx={{
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            justifyContent: 'space-between',
+            rowGap: 1,
+          }}
+        >
+          <AppBrandWordmark onNavigateHome={goBrandHome} />
+          <Stack
+            direction="row"
+            spacing={1.5}
+            sx={{
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              ml: { xs: 0, sm: 'auto' },
+            }}
           >
-            Выйти
-          </button>
-        </p>
-      </header>
+            <Typography variant="body2" color="text.secondary">
+              {accountLabel}
+            </Typography>
+            <Button
+              variant="outlined"
+              color="secondary"
+              size="small"
+              onClick={() => logout()}
+            >
+              Выйти
+            </Button>
+          </Stack>
+        </Stack>
+      </Box>
 
-      <nav className="app__nav" aria-label="Primary">
-        <button
-          type="button"
-          className={`app__navBtn${mainTab === 'playground' ? ' app__navBtn--active' : ''}`}
-          aria-current={mainTab === 'playground' ? 'page' : undefined}
-          onClick={() => setMainTab('playground')}
-        >
-          React sandbox
-        </button>
-        <button
-          type="button"
-          className={`app__navBtn${mainTab === 'api' ? ' app__navBtn--active' : ''}`}
-          aria-current={mainTab === 'api' ? 'page' : undefined}
-          onClick={() => setMainTab('api')}
-        >
-          API &amp; tasks
-        </button>
-        <button
-          type="button"
-          className={`app__navBtn${mainTab === 'presets' ? ' app__navBtn--active' : ''}`}
-          aria-current={mainTab === 'presets' ? 'page' : undefined}
-          onClick={() => setMainTab('presets')}
-        >
-          Пресеты
-        </button>
-      </nav>
+      <Box
+        component="nav"
+        aria-label="Primary"
+        sx={{
+          display: 'flex',
+          gap: 1,
+          mb: isFullScreenEditor ? 1 : 2.5,
+          flexWrap: 'wrap',
+          flexShrink: 0,
+          alignItems: 'center',
+        }}
+      >
+        {isSandbox ? (
+          <Button variant="outlined" color="secondary" size="small" onClick={exitSandboxToRooms}>
+            К комнатам
+          </Button>
+        ) : isPresetEditor ? (
+          <Button
+            variant="outlined"
+            color="secondary"
+            size="small"
+            onClick={openPresetList}
+          >
+            К списку пресетов
+          </Button>
+        ) : (
+          <ToggleButtonGroup
+            exclusive
+            size="small"
+            value={mainTab}
+            onChange={(_, value: MainTab | null) => {
+              if (value) {
+                commitTab(value)
+              }
+            }}
+            aria-label="Раздел приложения"
+          >
+            <ToggleButton value="rooms">Комнаты</ToggleButton>
+            <ToggleButton value="presets">Пресеты</ToggleButton>
+          </ToggleButtonGroup>
+        )}
+      </Box>
 
-      {mainTab === 'playground' ? (
-        <section className="panel panel--wide" aria-label="React sandbox">
-          <h2>React sandbox</h2>
-          <div className="panel__sandboxBody">
+      {isSandbox ? (
+        <Paper
+          component="section"
+          aria-label="Редактор комнаты"
+          elevation={0}
+          sx={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0,
+            minWidth: 0,
+            p: 0,
+            bgcolor: 'transparent',
+            border: 'none',
+            boxShadow: 'none',
+          }}
+        >
+          <Box
+            sx={{
+              flex: 1,
+              minHeight: 0,
+              minWidth: 0,
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
             <Suspense
-              fallback={<p className="panel__muted">Loading editor…</p>}
+              fallback={
+                <Typography color="text.secondary">Loading editor…</Typography>
+              }
             >
-              <Playground
-                onInvalidExplicitRoom={() => {
-                  replaceUrlForInvalidRoom()
-                  setMainTab('presets')
-                }}
-              />
+              <Playground key={roomId ?? 'none'} onInvalidExplicitRoom={onInvalidRoom} />
             </Suspense>
-          </div>
-        </section>
+          </Box>
+        </Paper>
       ) : mainTab === 'presets' ? (
-        <TaskPresetsPanel />
+        isPresetEditor ? (
+          <Box
+            sx={{
+              flex: 1,
+              minHeight: 0,
+              minWidth: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+          >
+            {presetEditorRoute === 'create' ? (
+              <PresetCreatePage onBackToList={openPresetList} />
+            ) : (
+              <PresetEditPage
+                key={presetEditorRoute.id}
+                presetId={presetEditorRoute.id}
+                onBackToList={openPresetList}
+              />
+            )}
+          </Box>
+        ) : (
+          <PresetListPanel
+            onOpenCreate={openPresetCreate}
+            onOpenEdit={openPresetEdit}
+          />
+        )
       ) : (
-        <>
-          <section className="panel" aria-label="API status">
-            <h2>Backend status</h2>
-            {healthError ? (
-              <p className="panel__error">{healthError}</p>
-            ) : health ? (
-              <p className="panel__ok">
-                <span className="dot dot--ok" aria-hidden />
-                <span>
-                  <strong className="panel__strong">{health.service}</strong> —
-                  OK
-                </span>
-              </p>
-            ) : (
-              <p className="panel__muted">Checking…</p>
-            )}
-            <button
-              type="button"
-              className="btn btn--ghost"
-              onClick={() => void refreshHealth()}
-            >
-              Refresh status
-            </button>
-          </section>
-
-          <section className="panel" aria-label="Tasks">
-            <h2>Tasks (CRUD demo)</h2>
-            <form className="form" onSubmit={onAdd}>
-              <label className="form__label" htmlFor="task-title">
-                Title
-              </label>
-              <div className="form__row">
-                <input
-                  id="task-title"
-                  className="input"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. Implement filter by title…"
-                  autoComplete="off"
-                  maxLength={500}
-                />
-                <button
-                  type="submit"
-                  className="btn"
-                  disabled={busy || !title.trim()}
-                >
-                  Add
-                </button>
-              </div>
-            </form>
-            {tasksError ? (
-              <p className="panel__error">{tasksError}</p>
-            ) : tasks.length === 0 ? (
-              <p className="panel__muted">
-                No tasks yet — add one to verify the flow.
-              </p>
-            ) : (
-              <ul className="list">
-                {tasks.map((task) => (
-                  <li key={task.id} className="list__item">
-                    <div className="list__body">
-                      <span className="list__title">{task.title}</span>
-                      <time className="list__time" dateTime={task.createdAt}>
-                        {new Date(task.createdAt).toLocaleString()}
-                      </time>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn btn--danger btn--small"
-                      onClick={() => void handleDelete(task.id)}
-                      disabled={busy}
-                    >
-                      Delete
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </>
+        <RoomsPanel onOpenRoom={navigateToPlaygroundRoom} />
       )}
-
-      {mainTab !== 'playground' ? (
-        <footer className="app__footer">
-          <p>
-            See <code>README.md</code> for a pre-interview checklist and common
-            extension ideas.
-          </p>
-        </footer>
-      ) : null}
-    </div>
+    </Box>
   )
 }
 
@@ -218,9 +391,12 @@ function App() {
 
   if (!ready) {
     return (
-      <div className="app">
-        <p className="panel__muted">Загрузка сессии…</p>
-      </div>
+      <Box sx={appShellPageSx}>
+        <Box component="header" sx={{ mb: 2 }}>
+          <AppBrandWordmark />
+        </Box>
+        <Typography color="text.secondary">Загрузка сессии…</Typography>
+      </Box>
     )
   }
 

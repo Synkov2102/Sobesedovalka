@@ -1,4 +1,6 @@
-export const DEFAULT_SANDBOX_APP = `import "./styles.css";
+/** Совпадает с frontend/src/sandbox/defaultFiles.ts — стартовые файлы пустой комнаты. */
+export const DEFAULT_SANDBOX_FILES: Record<string, string> = {
+  '/App.tsx': `import "./styles.css";
 import { useState } from "react";
 
 export default function App() {
@@ -16,9 +18,8 @@ export default function App() {
     </main>
   );
 }
-`
-
-export const DEFAULT_SANDBOX_STYLES = `.sandbox-main {
+`,
+  '/styles.css': `.sandbox-main {
   font-family: system-ui, sans-serif;
   max-width: 36rem;
   padding: 1rem;
@@ -51,4 +52,7 @@ export const DEFAULT_SANDBOX_STYLES = `.sandbox-main {
 .sandbox-main button:hover {
   opacity: 0.92;
 }
-`
+`,
+}
+
+export const DEFAULT_SANDBOX_FOLDERS: string[] = []

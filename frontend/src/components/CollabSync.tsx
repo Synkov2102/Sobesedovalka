@@ -21,6 +21,7 @@ import {
 } from '../collab/peerColor'
 import { normalizeSandpackFilePath } from '../collab/sandpackPaths'
 import { readSandpackSelection } from '../collab/sandpackCursor'
+import { getAccessToken } from '../auth/tokenStorage'
 import { getFoldersForFile, normalizeNewFolderPath } from './PlaygroundFileExplorer/utils/paths'
 
 function collabWsUrl(): string {
@@ -55,7 +56,7 @@ type CollabSnapshotPayload = {
   folders?: string[]
 }
 
-type CollabFsContextValue = {
+export type CollabFsContextValue = {
   filePaths: string[]
   folderPaths: string[]
   snapshotReady: boolean
@@ -64,7 +65,7 @@ type CollabFsContextValue = {
   removeFile: (path: string) => void
 }
 
-const CollabFsContext = createContext<CollabFsContextValue | null>(null)
+export const CollabFsContext = createContext<CollabFsContextValue | null>(null)
 
 function isFsChange(m: unknown): m is FsChange {
   return (
@@ -176,7 +177,9 @@ function syncSandpackSnapshot(
 export function useCollabFs(): CollabFsContextValue {
   const value = useContext(CollabFsContext)
   if (!value) {
-    throw new Error('useCollabFs must be used inside CollabSync')
+    throw new Error(
+      'useCollabFs must be used inside CollabSync or LocalSandpackFsProvider',
+    )
   }
   return value
 }
@@ -302,6 +305,9 @@ export function CollabSync({
     const socket = io(collabWsUrl(), {
       transports: ['websocket', 'polling'],
       path: '/socket.io',
+      auth: (cb) => {
+        cb({ token: getAccessToken() ?? '' })
+      },
     })
     socketRef.current = socket
 

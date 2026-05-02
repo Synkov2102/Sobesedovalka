@@ -36,6 +36,14 @@ export class TaskPresetsService {
     return docs.map((doc) => this.toView(doc));
   }
 
+  async getOne(userId: string, id: string): Promise<TaskPresetView> {
+    const doc = await this.repo.findByIdForUser(id, userId);
+    if (!doc) {
+      throw new NotFoundException('Preset not found');
+    }
+    return this.toView(doc);
+  }
+
   async create(
     userId: string,
     dto: CreateTaskPresetDto,
@@ -120,6 +128,11 @@ export class TaskPresetsService {
     }
     const roomId = `preset-${randomUUID()}`;
     await this.collabRepo.seedRoom(roomId, preset.files, preset.folders);
+    await this.collabRepo.setRoomOwnership(roomId, {
+      ownerUserId: userId,
+      title: preset.title,
+      sourcePresetId: preset._id,
+    });
     return { roomId };
   }
 

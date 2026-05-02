@@ -8,7 +8,7 @@
 |--------|------------|
 | `api/` | Вызовы HTTP: маленькие функции (`fetchTasks`, `fetchHealth`), без UI-состояния. Общий префикс — `api/constants.ts`. |
 | `types/` | Доменные типы, общие для UI и API (`Task`, ответы бэкенда). |
-| `hooks/` | Переиспользуемая логика с `useState` / `useEffect` (например `useBackendDemo`). |
+| `hooks/` | Переиспользуемая логика с `useState` / `useEffect`. |
 | `components/` | Компоненты и их CSS; по возможности одна ответственность на файл. |
 | `collab/` | Типы и утилиты коллаборации (`collab.types.ts`, курсор Sandpack). |
 
@@ -34,7 +34,7 @@
 
 ## Именование
 
-- Файлы: **`kebab-case`** для типов и API (`api.types.ts`); хуки — **`useThing.ts`** (`useBackendDemo.ts`); компоненты — см. ниже.
+- Файлы: **`kebab-case`** для типов и API (`api.types.ts`); хуки — **`useThing.ts`**; компоненты — см. ниже.
 - Компоненты: **`PascalCase.tsx`**.
 
 ## Согласование с API

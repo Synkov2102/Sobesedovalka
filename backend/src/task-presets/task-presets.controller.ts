@@ -34,9 +34,19 @@ export class TaskPresetsController {
     return this.service.collabRoomReady(roomId);
   }
 
+  @Get(':id')
+  getOne(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.service.getOne(req.user.userId, id);
+  }
+
   @Post()
   create(@Req() req: AuthedRequest, @Body() dto: CreateTaskPresetDto) {
     return this.service.create(req.user.userId, dto);
+  }
+
+  @Post(':id/start-room')
+  startRoom(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.service.startRoom(req.user.userId, id);
   }
 
   @Patch(':id')
@@ -52,10 +62,5 @@ export class TaskPresetsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(@Req() req: AuthedRequest, @Param('id') id: string) {
     await this.service.remove(req.user.userId, id);
-  }
-
-  @Post(':id/start-room')
-  startRoom(@Req() req: AuthedRequest, @Param('id') id: string) {
-    return this.service.startRoom(req.user.userId, id);
   }
 }

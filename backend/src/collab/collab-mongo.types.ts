@@ -33,4 +33,8 @@ export type CollabRoomDoc = {
   _id: string;
   createdAt: Date;
   updatedAt: Date;
+  /** Владелец комнаты (после создания из пресета или «Новая комната»). */
+  ownerUserId?: string;
+  title?: string;
+  sourcePresetId?: string;
 };

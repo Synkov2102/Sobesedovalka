@@ -1,5 +1,18 @@
 import { type FormEvent, useState } from 'react'
+import {
+  Alert,
+  Box,
+  Button,
+  Paper,
+  Stack,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
+} from '@mui/material'
 import { useAuth } from './AuthContext'
+import { appShellPageSx, sectionSurfacePaddingSx } from '../theme/layout'
+import { AppBrandWordmark } from '../components/AppBrandWordmark'
 
 type Mode = 'login' | 'register'
 
@@ -67,130 +80,146 @@ export function AuthScreen() {
   const displayError = localError ?? authError
 
   return (
-    <div className="app authScreen">
-      <header className="app__header">
-        <p className="app__eyebrow">Live coding interview</p>
-        <h1>Вход</h1>
-        <p className="app__lead">
+    <Box sx={appShellPageSx}>
+      <Box component="header" sx={{ mb: 3 }}>
+        <AppBrandWordmark />
+        <Typography
+          variant="h5"
+          component="h1"
+          sx={{
+            mb: 1.25,
+            mt: 2,
+            fontWeight: 700,
+            letterSpacing: '-0.02em',
+          }}
+        >
+          {mode === 'login' ? 'Вход' : 'Регистрация'}
+        </Typography>
+        <Typography variant="body1" color="text.secondary">
           Войдите или зарегистрируйтесь по почте и/или номеру телефона и паролю.
           Подтверждение почты и телефона пока не требуется.
-        </p>
-      </header>
+        </Typography>
+      </Box>
 
-      <div className="authScreen__tabs" role="tablist" aria-label="Режим">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === 'login'}
-          className={`app__navBtn${mode === 'login' ? ' app__navBtn--active' : ''}`}
-          onClick={() => switchMode('login')}
-        >
-          Вход
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === 'register'}
-          className={`app__navBtn${mode === 'register' ? ' app__navBtn--active' : ''}`}
-          onClick={() => switchMode('register')}
-        >
-          Регистрация
-        </button>
-      </div>
+      <ToggleButtonGroup
+        exclusive
+        size="small"
+        value={mode}
+        onChange={(_, v: Mode | null) => v && switchMode(v)}
+        aria-label="Режим"
+        sx={{ mb: 2.5, display: 'flex', flexWrap: 'wrap', gap: 1 }}
+      >
+        <ToggleButton value="login">Вход</ToggleButton>
+        <ToggleButton value="register">Регистрация</ToggleButton>
+      </ToggleButtonGroup>
 
-      <section className="panel authScreen__panel" aria-label={mode === 'login' ? 'Вход' : 'Регистрация'}>
+      <Paper
+        component="section"
+        variant="outlined"
+        aria-label={mode === 'login' ? 'Вход' : 'Регистрация'}
+        sx={sectionSurfacePaddingSx}
+      >
         {displayError ? (
-          <p className="panel__error" role="alert">
+          <Alert severity="error" sx={{ mb: 2 }}>
             {displayError}
-          </p>
+          </Alert>
         ) : null}
 
         {mode === 'login' ? (
-          <form className="form" onSubmit={(ev) => void onLogin(ev)}>
-            <label className="form__label" htmlFor="auth-login">
-              Почта или телефон
-            </label>
-            <input
+          <Stack
+            component="form"
+            spacing={2}
+            onSubmit={(ev) => void onLogin(ev)}
+            noValidate
+          >
+            <TextField
               id="auth-login"
-              className="input"
+              label="Почта или телефон"
               value={loginField}
               onChange={(ev) => setLoginField(ev.target.value)}
               autoComplete="username"
-              maxLength={320}
+              slotProps={{ htmlInput: { maxLength: 320 } }}
+              fullWidth
+              size="small"
             />
-            <label className="form__label" htmlFor="auth-password">
-              Пароль
-            </label>
-            <input
+            <TextField
               id="auth-password"
+              label="Пароль"
               type="password"
-              className="input"
               value={password}
               onChange={(ev) => setPassword(ev.target.value)}
               autoComplete="current-password"
-              maxLength={128}
+              slotProps={{ htmlInput: { maxLength: 128 } }}
+              fullWidth
+              size="small"
             />
-            <button
+            <Button
               type="submit"
-              className="btn"
-              disabled={
-                busy || !loginField.trim() || !password
-              }
+              variant="contained"
+              color="primary"
+              disabled={busy || !loginField.trim() || !password}
             >
               Войти
-            </button>
-          </form>
+            </Button>
+          </Stack>
         ) : (
-          <form className="form" onSubmit={(ev) => void onRegister(ev)}>
-            <label className="form__label" htmlFor="auth-email">
-              Почта (необязательно)
-            </label>
-            <input
+          <Stack
+            component="form"
+            spacing={2}
+            onSubmit={(ev) => void onRegister(ev)}
+            noValidate
+          >
+            <TextField
               id="auth-email"
+              label="Почта (необязательно)"
               type="text"
-              className="input"
               value={email}
               onChange={(ev) => setEmail(ev.target.value)}
               autoComplete="email"
-              maxLength={320}
+              slotProps={{ htmlInput: { maxLength: 320 } }}
+              fullWidth
+              size="small"
             />
-            <label className="form__label" htmlFor="auth-phone">
-              Телефон (необязательно)
-            </label>
-            <input
+            <TextField
               id="auth-phone"
+              label="Телефон (необязательно)"
               type="text"
-              className="input"
               value={phone}
               onChange={(ev) => setPhone(ev.target.value)}
               autoComplete="tel"
-              maxLength={64}
+              slotProps={{ htmlInput: { maxLength: 64 } }}
+              fullWidth
+              size="small"
             />
-            <p className="panel__muted authScreen__hint">
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ mt: -0.5 }}
+            >
               Нужно заполнить хотя бы одно из двух полей выше.
-            </p>
-            <label className="form__label" htmlFor="auth-reg-password">
-              Пароль (мин. 8 символов)
-            </label>
-            <input
+            </Typography>
+            <TextField
               id="auth-reg-password"
+              label="Пароль (мин. 8 символов)"
               type="password"
-              className="input"
               value={password}
               onChange={(ev) => setPassword(ev.target.value)}
               autoComplete="new-password"
-              maxLength={128}
+              slotProps={{ htmlInput: { maxLength: 128 } }}
+              fullWidth
+              size="small"
             />
-            <button
+            <Button
               type="submit"
-              className="btn"
+              variant="contained"
+              color="primary"
               disabled={busy || !password.trim()}
             >
               Зарегистрироваться
-            </button>
-          </form>
+            </Button>
+          </Stack>
         )}
-      </section>
-    </div>
+      </Paper>
+    </Box>
   )
 }
