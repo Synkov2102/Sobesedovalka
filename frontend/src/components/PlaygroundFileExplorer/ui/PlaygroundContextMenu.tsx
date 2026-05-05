@@ -51,14 +51,14 @@ export function PlaygroundContextMenu({
             className="playground__contextMenuItem"
             onClick={handleCreateFileInRoot}
           >
-            New File
+            Новый файл
           </button>
           <button
             type="button"
             className="playground__contextMenuItem"
             onClick={handleCreateFolderInRoot}
           >
-            New Folder
+            Новая папка
           </button>
         </>
       ) : null}
@@ -70,14 +70,14 @@ export function PlaygroundContextMenu({
             className="playground__contextMenuItem"
             onClick={handleCreateFileInContextFolder}
           >
-            New File
+            Новый файл
           </button>
           <button
             type="button"
             className="playground__contextMenuItem"
             onClick={handleCreateFolderInContextFolder}
           >
-            New Folder
+            Новая папка
           </button>
           <button
             type="button"
@@ -85,7 +85,7 @@ export function PlaygroundContextMenu({
             onClick={handleRenameContextFolder}
             disabled={!canRenameFolder(contextMenu.target.path)}
           >
-            Rename
+            Переименовать
           </button>
           <button
             type="button"
@@ -93,7 +93,7 @@ export function PlaygroundContextMenu({
             onClick={handleDeleteContextFolder}
             disabled={!canRenameFolder(contextMenu.target.path)}
           >
-            Delete
+            Удалить
           </button>
         </>
       ) : null}
@@ -105,7 +105,7 @@ export function PlaygroundContextMenu({
             className="playground__contextMenuItem"
             onClick={handleCopyPathContextFile}
           >
-            Copy Path
+            Копировать путь
           </button>
           <button
             type="button"
@@ -113,7 +113,7 @@ export function PlaygroundContextMenu({
             onClick={handleRenameContextFile}
             disabled={!canRenameFile(contextMenu.target.path)}
           >
-            Rename
+            Переименовать
           </button>
           <button
             type="button"
@@ -121,7 +121,7 @@ export function PlaygroundContextMenu({
             onClick={handleDeleteContextFile}
             disabled={!canRenameFile(contextMenu.target.path)}
           >
-            Delete
+            Удалить
           </button>
         </>
       ) : null}

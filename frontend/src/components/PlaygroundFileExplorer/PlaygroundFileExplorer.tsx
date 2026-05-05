@@ -507,9 +507,10 @@ export function PlaygroundFileExplorer({
     >
       <div className="playground__fileExplorerHeader">
         <div>
-          <div className="playground__label">Explorer</div>
+          <div className="playground__label">Проводник</div>
           <div className="playground__fileExplorerHint">
-            Right click to create, rename, or delete files and folders.
+            Кликните правой кнопкой, чтобы создавать, переименовывать и удалять
+            файлы и папки.
           </div>
         </div>
       </div>
@@ -517,7 +518,7 @@ export function PlaygroundFileExplorer({
       <div className="playground__fileTree" role="tree">
         {!snapshotReady ? (
           <div className="playground__treeRow" style={{ padding: '12px' }}>
-            Loading files...
+            Загрузка файлов...
           </div>
         ) : null}
         <div

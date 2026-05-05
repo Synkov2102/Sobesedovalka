@@ -288,7 +288,7 @@ function AppMain({ user, logout }: AppMainProps) {
 
       <Box
         component="nav"
-        aria-label="Primary"
+        aria-label="Основная навигация"
         sx={{
           display: 'flex',
           gap: 1,
@@ -362,7 +362,7 @@ function AppMain({ user, logout }: AppMainProps) {
           >
             <Suspense
               fallback={
-                <Typography color="text.secondary">Loading editor…</Typography>
+                <Typography color="text.secondary">Загрузка редактора…</Typography>
               }
             >
               <Playground
