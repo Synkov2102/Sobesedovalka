@@ -202,6 +202,7 @@ export function CollabSync({
     headCol: 0,
   })
   const lastLocalFsTouch = useRef<Map<string, number>>(new Map())
+  const lastRemoteRevision = useRef<Map<string, number>>(new Map())
   const onRosterRef = useRef(onRoster)
   const onWelcomeRef = useRef(onWelcome)
   useLayoutEffect(() => {
@@ -263,6 +264,11 @@ export function CollabSync({
       if (!normalizedPath) {
         return
       }
+      const pending = debounceTimers.current.get(normalizedPath)
+      if (pending) {
+        clearTimeout(pending)
+        debounceTimers.current.delete(normalizedPath)
+      }
 
       const nextFilePaths = filePathsRef.current.filter(
         (entry) => entry !== normalizedPath,
@@ -300,6 +306,7 @@ export function CollabSync({
 
     const onConnect = () => {
       setSnapshotReady(false)
+      lastRemoteRevision.current.clear()
       lastPresence.current = {
         file: '',
         anchorLine: 0,
@@ -393,7 +400,10 @@ export function CollabSync({
       )
 
       skipOutbound.current = true
+      debounceTimers.current.forEach((t) => clearTimeout(t))
+      debounceTimers.current.clear()
       lastLocalFsTouch.current.clear()
+      lastRemoteRevision.current.clear()
       filePathsRef.current = nextFilePaths
       folderPathsRef.current = nextFolders
       setFilePaths(nextFilePaths)
@@ -405,10 +415,21 @@ export function CollabSync({
 
     socket.on(
       'collab-file',
-      (p: { path: string; content: string; from: string }) => {
+      (p: { path: string; content: string; from: string; rev?: number }) => {
+        if (p.from === clientId) {
+          return
+        }
         const path = normalizeSandpackFilePath(p.path)
         if (!path) {
           return
+        }
+        if (typeof p.rev === 'number' && Number.isFinite(p.rev)) {
+          const currentRev = lastRemoteRevision.current.get(path) ?? 0
+          const nextRev = Math.floor(p.rev)
+          if (nextRev <= currentRev) {
+            return
+          }
+          lastRemoteRevision.current.set(path, nextRev)
         }
         setFilePaths((prev) => {
           const next = prev.includes(path)
@@ -447,27 +468,46 @@ export function CollabSync({
       },
     )
 
-    socket.on('collab-remove', (p: { path: string; from: string }) => {
-      const path = normalizeSandpackFilePath(p.path)
-      if (!path) {
-        return
-      }
-      setFilePaths((prev) => {
-        const next = prev.filter((entry) => entry !== path)
-        filePathsRef.current = next
-        setFolderPaths((currentFolders) => {
-          const nextFolders = normalizeFolderList(next, currentFolders)
-          folderPathsRef.current = nextFolders
-          return nextFolders
+    socket.on(
+      'collab-remove',
+      (p: { path: string; from: string; rev?: number }) => {
+        if (p.from === clientId) {
+          return
+        }
+        const path = normalizeSandpackFilePath(p.path)
+        if (!path) {
+          return
+        }
+        if (typeof p.rev === 'number' && Number.isFinite(p.rev)) {
+          const currentRev = lastRemoteRevision.current.get(path) ?? 0
+          const nextRev = Math.floor(p.rev)
+          if (nextRev <= currentRev) {
+            return
+          }
+          lastRemoteRevision.current.set(path, nextRev)
+        }
+        const pending = debounceTimers.current.get(path)
+        if (pending) {
+          clearTimeout(pending)
+          debounceTimers.current.delete(path)
+        }
+        setFilePaths((prev) => {
+          const next = prev.filter((entry) => entry !== path)
+          filePathsRef.current = next
+          setFolderPaths((currentFolders) => {
+            const nextFolders = normalizeFolderList(next, currentFolders)
+            folderPathsRef.current = nextFolders
+            return nextFolders
+          })
+          return next
         })
-        return next
-      })
-      skipOutbound.current = true
-      if (sandpackRef.current.files[path]) {
-        sandpackRef.current.deleteFile(path, true)
-      }
-      skipOutbound.current = false
-    })
+        skipOutbound.current = true
+        if (sandpackRef.current.files[path]) {
+          sandpackRef.current.deleteFile(path, true)
+        }
+        skipOutbound.current = false
+      },
+    )
 
     socket.on('collab-folders', (folders: string[]) => {
       const nextFolders = normalizeFolderList(
@@ -525,6 +565,11 @@ export function CollabSync({
         const normalizedPath = normalizeSandpackFilePath(message.path)
         if (!normalizedPath) {
           return
+        }
+        const pending = debounceTimers.current.get(normalizedPath)
+        if (pending) {
+          clearTimeout(pending)
+          debounceTimers.current.delete(normalizedPath)
         }
         socketRef.current?.emit('collab-remove', {
           room,

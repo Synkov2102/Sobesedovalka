@@ -89,6 +89,8 @@ export class CollabGateway implements OnGatewayDisconnect {
   ) {}
 
   private readonly roomFiles = new Map<string, Map<string, string>>();
+  /** room -> path -> monotonic revision (also tombstone for removed files) */
+  private readonly roomFileRevisions = new Map<string, Map<string, number>>();
   private readonly roomFolders = new Map<string, Set<string>>();
   /** room -> clientId -> peer */
   private readonly roomPeers = new Map<string, Map<string, RoomPeer>>();
@@ -126,6 +128,7 @@ export class CollabGateway implements OnGatewayDisconnect {
       if (this.roomPeers.get(room)?.size === 0) {
         this.roomPeers.delete(room);
         this.lastRosterPayload.delete(room);
+        this.roomFileRevisions.delete(room);
       }
     }
 
@@ -299,11 +302,19 @@ export class CollabGateway implements OnGatewayDisconnect {
     if (!this.roomFiles.has(room)) {
       this.roomFiles.set(room, new Map());
     }
+    if (!this.roomFileRevisions.has(room)) {
+      this.roomFileRevisions.set(room, new Map());
+    }
     this.roomFiles.get(room)!.set(path, content);
+    const revisionMap = this.roomFileRevisions.get(room)!;
+    const nextRevision = (revisionMap.get(path) ?? 0) + 1;
+    revisionMap.set(path, nextRevision);
     void this.mongoRepo
       .upsertFile(room, path, content)
       .catch((e: unknown) => this.logger.warn(String(e)));
-    this.server.to(room).emit('collab-file', { path, content, from });
+    this.server
+      .to(room)
+      .emit('collab-file', { path, content, from, rev: nextRevision });
   }
 
   @SubscribeMessage('collab-remove')
@@ -324,11 +335,17 @@ export class CollabGateway implements OnGatewayDisconnect {
     if (!this.roomFiles.has(room)) {
       return;
     }
+    if (!this.roomFileRevisions.has(room)) {
+      this.roomFileRevisions.set(room, new Map());
+    }
+    const revisionMap = this.roomFileRevisions.get(room)!;
+    const nextRevision = (revisionMap.get(path) ?? 0) + 1;
+    revisionMap.set(path, nextRevision);
     this.roomFiles.get(room)!.delete(path);
     void this.mongoRepo
       .deleteFile(room, path)
       .catch((e: unknown) => this.logger.warn(String(e)));
-    this.server.to(room).emit('collab-remove', { path, from });
+    this.server.to(room).emit('collab-remove', { path, from, rev: nextRevision });
   }
 
   @SubscribeMessage('collab-folders-sync')
@@ -469,6 +486,12 @@ export class CollabGateway implements OnGatewayDisconnect {
     await this.mongoRepo.ensureRoom(room);
     const loaded = await this.mongoRepo.loadFiles(room);
     this.roomFiles.set(room, new Map(Object.entries(loaded)));
+    this.roomFileRevisions.set(
+      room,
+      new Map(
+        Object.keys(loaded).map((path) => [normalizeSandpackFilePath(path), 1]),
+      ),
+    );
     const loadedFolders = await this.mongoRepo.loadFolders(room);
     this.roomFolders.set(room, new Set(deriveFolderPaths(loaded, loadedFolders)));
   }
