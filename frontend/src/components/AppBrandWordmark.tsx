@@ -19,11 +19,7 @@ type AppBrandWordmarkProps = {
 
 export function AppBrandWordmark({ onNavigateHome }: AppBrandWordmarkProps) {
   const label = (
-    <Stack
-      direction="row"
-      spacing={0}
-      sx={{ alignItems: 'center' }}
-    >
+    <Stack direction="row" spacing={0} sx={{ alignItems: 'center' }}>
       <BrandMark
         sx={{
           width: { xs: 30, sm: 34 },

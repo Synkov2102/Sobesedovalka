@@ -18,7 +18,7 @@ import { normalizeSandpackFilePath } from '../collab/sandpackPaths'
 function peerInitials(displayName: string): string {
   const parts = displayName.trim().split(/\s+/).filter(Boolean)
   if (parts.length >= 2) {
-    return `${parts[0]!.slice(0, 1)}${parts[1]!.slice(0, 1)}`.toUpperCase()
+    return `${parts[0].slice(0, 1)}${parts[1].slice(0, 1)}`.toUpperCase()
   }
   const single = parts[0] ?? displayName.trim()
   return (single.slice(0, 2) || '?').toUpperCase()
@@ -181,7 +181,10 @@ export function PlaygroundCollabBar({
                             sx={{
                               height: 22,
                               flexShrink: 0,
-                              '& .MuiChip-label': { px: 0.85, fontSize: '0.7rem' },
+                              '& .MuiChip-label': {
+                                px: 0.85,
+                                fontSize: '0.7rem',
+                              },
                             }}
                           />
                         ) : null}

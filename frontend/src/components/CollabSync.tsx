@@ -1,7 +1,5 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -22,7 +20,11 @@ import {
 import { normalizeSandpackFilePath } from '../collab/sandpackPaths'
 import { readSandpackSelection } from '../collab/sandpackCursor'
 import { getAccessToken } from '../auth/tokenStorage'
-import { getFoldersForFile, normalizeNewFolderPath } from './PlaygroundFileExplorer/utils/paths'
+import { CollabFsContext } from './collabFsContext'
+import {
+  getFoldersForFile,
+  normalizeNewFolderPath,
+} from './PlaygroundFileExplorer/utils/paths'
 
 function collabWsUrl(): string {
   const raw = import.meta.env.VITE_COLLAB_WS_URL
@@ -55,17 +57,6 @@ type CollabSnapshotPayload = {
   files?: Record<string, string>
   folders?: string[]
 }
-
-export type CollabFsContextValue = {
-  filePaths: string[]
-  folderPaths: string[]
-  snapshotReady: boolean
-  syncFolders: (folders: string[], nextFilePaths?: string[]) => void
-  saveFile: (path: string, content: string) => void
-  removeFile: (path: string) => void
-}
-
-export const CollabFsContext = createContext<CollabFsContextValue | null>(null)
 
 function isFsChange(m: unknown): m is FsChange {
   return (
@@ -174,16 +165,6 @@ function syncSandpackSnapshot(
   }
 }
 
-export function useCollabFs(): CollabFsContextValue {
-  const value = useContext(CollabFsContext)
-  if (!value) {
-    throw new Error(
-      'useCollabFs must be used inside CollabSync or LocalSandpackFsProvider',
-    )
-  }
-  return value
-}
-
 function sortPaths(paths: string[]): string[] {
   return Array.from(new Set(paths)).sort((a, b) => a.localeCompare(b))
 }
@@ -259,7 +240,10 @@ export function CollabSync({
       filePathsRef.current = nextFilePaths
       setFilePaths(nextFilePaths)
 
-      const nextFolders = normalizeFolderList(nextFilePaths, folderPathsRef.current)
+      const nextFolders = normalizeFolderList(
+        nextFilePaths,
+        folderPathsRef.current,
+      )
       folderPathsRef.current = nextFolders
       setFolderPaths(nextFolders)
 
@@ -286,7 +270,10 @@ export function CollabSync({
       filePathsRef.current = nextFilePaths
       setFilePaths(nextFilePaths)
 
-      const nextFolders = normalizeFolderList(nextFilePaths, folderPathsRef.current)
+      const nextFolders = normalizeFolderList(
+        nextFilePaths,
+        folderPathsRef.current,
+      )
       folderPathsRef.current = nextFolders
       setFolderPaths(nextFolders)
 
@@ -397,7 +384,9 @@ export function CollabSync({
 
     socket.on('collab-snapshot', (payload: CollabSnapshotPayload) => {
       const files = normalizeSnapshotFiles(payload?.files)
-      const nextFilePaths = Object.keys(files).sort((a, b) => a.localeCompare(b))
+      const nextFilePaths = Object.keys(files).sort((a, b) =>
+        a.localeCompare(b),
+      )
       const nextFolders = normalizeFolderList(
         nextFilePaths,
         Array.isArray(payload?.folders) ? payload.folders : [],
@@ -510,28 +499,36 @@ export function CollabSync({
         return
       }
       if (isFsChange(message)) {
-        const { path, content } = message
-        lastLocalFsTouch.current.set(path, Date.now())
-        const prev = debounceTimers.current.get(path)
+        const normalizedPath = normalizeSandpackFilePath(message.path)
+        if (!normalizedPath) {
+          return
+        }
+        const { content } = message
+        lastLocalFsTouch.current.set(normalizedPath, Date.now())
+        const prev = debounceTimers.current.get(normalizedPath)
         if (prev) {
           clearTimeout(prev)
         }
         debounceTimers.current.set(
-          path,
+          normalizedPath,
           setTimeout(() => {
-            debounceTimers.current.delete(path)
+            debounceTimers.current.delete(normalizedPath)
             socketRef.current?.emit('collab-file', {
               room,
-              path,
+              path: normalizedPath,
               content,
               from: clientId,
             })
           }, COLLAB_FILE_DEBOUNCE_MS),
         )
       } else if (isFsRemove(message)) {
+        const normalizedPath = normalizeSandpackFilePath(message.path)
+        if (!normalizedPath) {
+          return
+        }
         socketRef.current?.emit('collab-remove', {
           room,
-          path: message.path,
+          path: normalizedPath,
           from: clientId,
         })
       }

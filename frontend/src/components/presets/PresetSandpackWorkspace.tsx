@@ -6,11 +6,7 @@ import {
   useSandpack,
 } from '@codesandbox/sandpack-react'
 import { useTheme } from '@mui/material/styles'
-import {
-  forwardRef,
-  useImperativeHandle,
-  useMemo,
-} from 'react'
+import { forwardRef, useImperativeHandle, useMemo } from 'react'
 import { normalizeSandpackFilePath } from '../../collab/sandpackPaths'
 import {
   DEFAULT_SANDBOX_APP,

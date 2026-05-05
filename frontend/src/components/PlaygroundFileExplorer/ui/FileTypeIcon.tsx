@@ -13,4 +13,3 @@ export function FileTypeIcon({ filePath }: { filePath: string }) {
     </span>
   )
 }
-

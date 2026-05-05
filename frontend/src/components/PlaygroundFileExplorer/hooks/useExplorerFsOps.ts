@@ -52,7 +52,8 @@ export function useExplorerFsOps({
   setCollapsedFolders: (updater: (prev: string[]) => string[]) => void
 }) {
   const mergeFolderPaths = useCallback(
-    (extraPaths: string[]) => sortUniqueFolderPaths([...folderPaths, ...extraPaths]),
+    (extraPaths: string[]) =>
+      sortUniqueFolderPaths([...folderPaths, ...extraPaths]),
     [folderPaths],
   )
 
@@ -89,8 +90,12 @@ export function useExplorerFsOps({
         return
       }
 
-      const nextFolders = folderPaths.filter((path) => !isPathInFolder(path, target.path))
-      const entries = filePaths.filter((path) => isPathInFolder(path, target.path))
+      const nextFolders = folderPaths.filter(
+        (path) => !isPathInFolder(path, target.path),
+      )
+      const entries = filePaths.filter((path) =>
+        isPathInFolder(path, target.path),
+      )
 
       entries.forEach((path) => removeFile(path))
       syncFolders(
@@ -137,7 +142,10 @@ export function useExplorerFsOps({
 
         do {
           const candidateName = `${stem}(${suffix})${extension}`
-          const candidatePath = joinFileWithName(targetParentPath, candidateName)
+          const candidatePath = joinFileWithName(
+            targetParentPath,
+            candidateName,
+          )
           if (!candidatePath) {
             return null
           }
@@ -151,7 +159,9 @@ export function useExplorerFsOps({
       )
       const nextFolders = mergeFolderPaths([
         ...getFoldersForFile(nextPath),
-        ...(sourceParentPath === '/' ? [] : getFolderAncestors(sourceParentPath)),
+        ...(sourceParentPath === '/'
+          ? []
+          : getFolderAncestors(sourceParentPath)),
       ])
 
       saveFile(nextPath, source.code ?? '')
@@ -182,7 +192,10 @@ export function useExplorerFsOps({
 
   const moveFolderPath = useCallback(
     (fromPath: string, targetParentPath: string, nextName?: string) => {
-      if (targetParentPath === fromPath || isPathInFolder(targetParentPath, fromPath)) {
+      if (
+        targetParentPath === fromPath ||
+        isPathInFolder(targetParentPath, fromPath)
+      ) {
         return null
       }
 
@@ -194,19 +207,30 @@ export function useExplorerFsOps({
         return null
       }
 
-      const entriesToMove = filePaths.filter((path) => isPathInFolder(path, fromPath))
+      const entriesToMove = filePaths.filter((path) =>
+        isPathInFolder(path, fromPath),
+      )
       const movingSet = new Set(entriesToMove)
       const nextEntries = entriesToMove.map((path) =>
         replacePathPrefix(path, fromPath, nextFolderPath),
       )
 
-      if (nextEntries.some((path) => filePathSet.has(path) && !movingSet.has(path))) {
+      if (
+        nextEntries.some(
+          (path) => filePathSet.has(path) && !movingSet.has(path),
+        )
+      ) {
         return null
       }
 
-      const movingFolders = folderPaths.filter((path) => isPathInFolder(path, fromPath))
+      const movingFolders = folderPaths.filter((path) =>
+        isPathInFolder(path, fromPath),
+      )
       const movingFolderSet = new Set(movingFolders)
-      if (folderPathSet.has(nextFolderPath) && !movingFolderSet.has(nextFolderPath)) {
+      if (
+        folderPathSet.has(nextFolderPath) &&
+        !movingFolderSet.has(nextFolderPath)
+      ) {
         return null
       }
 
@@ -273,4 +297,3 @@ export function useExplorerFsOps({
 
   return { deletePath, moveFilePath, moveFolderPath }
 }
-

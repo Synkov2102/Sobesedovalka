@@ -38,7 +38,10 @@ export function renderFile({
   active: string
   sandpack: SandpackLike
   peersByActiveFile: Map<string, CollabPeerDTO[]>
-  openContextMenu: (event: MouseEvent<HTMLElement>, target: ContextMenuTarget) => void
+  openContextMenu: (
+    event: MouseEvent<HTMLElement>,
+    target: ContextMenuTarget,
+  ) => void
   dragItem: DragItem | null
   setDragItem: Dispatch<SetStateAction<DragItem | null>>
   setDropTargetPath: Dispatch<SetStateAction<string | null>>
@@ -46,7 +49,11 @@ export function renderFile({
   renderDraftRowAtDepth: (depth: number) => ReactNode
   FileTypeIcon: (props: { filePath: string }) => ReactNode
 }) {
-  if (draft?.mode === 'rename' && draft.kind === 'file' && draft.path === file.path) {
+  if (
+    draft?.mode === 'rename' &&
+    draft.kind === 'file' &&
+    draft.path === file.path
+  ) {
     return <div key={file.path}>{renderDraftRowAtDepth(depth)}</div>
   }
 
@@ -80,7 +87,8 @@ export function renderFile({
     }
     if (
       dragItem.kind === 'folder' &&
-      (parentPath === dragItem.path || isPathInFolder(parentPath, dragItem.path))
+      (parentPath === dragItem.path ||
+        isPathInFolder(parentPath, dragItem.path))
     ) {
       return
     }
@@ -158,4 +166,3 @@ export function renderFile({
     </div>
   )
 }
-

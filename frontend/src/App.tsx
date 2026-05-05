@@ -1,4 +1,11 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import {
   Box,
   Button,
@@ -114,7 +121,10 @@ function AppMain({ user, logout }: AppMainProps) {
     return () => window.removeEventListener('popstate', onPop)
   }, [bumpNav])
 
-  const roomId = useMemo(() => readRoomIdFromSearch(window.location.search), [navRevision])
+  const roomId = useMemo(
+    () => readRoomIdFromSearch(window.location.search),
+    [navRevision],
+  )
   const isSandbox = Boolean(roomId)
   const presetEditorRoute = useMemo(() => {
     if (mainTab !== 'presets') {
@@ -122,8 +132,7 @@ function AppMain({ user, logout }: AppMainProps) {
     }
     return parsePresetEditorRoute(window.location.search)
   }, [mainTab, navRevision])
-  const isPresetEditor =
-    mainTab === 'presets' && presetEditorRoute !== 'list'
+  const isPresetEditor = mainTab === 'presets' && presetEditorRoute !== 'list'
   const isFullScreenEditor = isSandbox || isPresetEditor
 
   const accountLabel = user.email ?? user.phone ?? user.id.slice(0, 8)
@@ -225,7 +234,11 @@ function AppMain({ user, logout }: AppMainProps) {
   return (
     <Box
       className={
-        isSandbox ? 'app--sandbox' : isPresetEditor ? 'app--preset-editor' : undefined
+        isSandbox
+          ? 'app--sandbox'
+          : isPresetEditor
+            ? 'app--preset-editor'
+            : undefined
       }
       sx={{
         ...(isFullScreenEditor ? editorFullScreenShellSx : appShellPageSx),
@@ -286,7 +299,12 @@ function AppMain({ user, logout }: AppMainProps) {
         }}
       >
         {isSandbox ? (
-          <Button variant="outlined" color="secondary" size="small" onClick={exitSandboxToRooms}>
+          <Button
+            variant="outlined"
+            color="secondary"
+            size="small"
+            onClick={exitSandboxToRooms}
+          >
             К комнатам
           </Button>
         ) : isPresetEditor ? (
@@ -347,7 +365,10 @@ function AppMain({ user, logout }: AppMainProps) {
                 <Typography color="text.secondary">Loading editor…</Typography>
               }
             >
-              <Playground key={roomId ?? 'none'} onInvalidExplicitRoom={onInvalidRoom} />
+              <Playground
+                key={roomId ?? 'none'}
+                onInvalidExplicitRoom={onInvalidRoom}
+              />
             </Suspense>
           </Box>
         </Paper>

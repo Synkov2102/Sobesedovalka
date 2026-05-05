@@ -7,11 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import {
-  fetchMe,
-  postAuthLogin,
-  postAuthRegister,
-} from '../api/auth'
+import { fetchMe, postAuthLogin, postAuthRegister } from '../api/auth'
 import type { AuthUser } from '../types/api.types'
 import {
   clearAccessToken,
@@ -107,9 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAccessToken(r.accessToken)
         setUser(r.user)
       } catch (err) {
-        setAuthError(
-          err instanceof Error ? err.message : 'Ошибка регистрации',
-        )
+        setAuthError(err instanceof Error ? err.message : 'Ошибка регистрации')
         throw err
       }
     },
@@ -136,9 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [user, ready, login, register, logout, authError, clearAuthError],
   )
 
-  return (
-    <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-  )
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
 export function useAuth(): AuthContextValue {

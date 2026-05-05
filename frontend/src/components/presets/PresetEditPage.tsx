@@ -9,10 +9,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  fetchTaskPreset,
-  updateTaskPreset,
-} from '../../api/taskPresets'
+import { fetchTaskPreset, updateTaskPreset } from '../../api/taskPresets'
 import { sectionSurfacePaddingSx } from '../../theme/layout'
 import type { TaskPreset } from '../../types/api.types'
 import {
@@ -182,9 +179,7 @@ export function PresetEditPage({
               variant="contained"
               color="primary"
               size="medium"
-              disabled={
-                busy || !title.trim() || !isSandpackCryptoAvailable()
-              }
+              disabled={busy || !title.trim() || !isSandpackCryptoAvailable()}
               onClick={() => void handleSavePreset()}
               sx={{ borderRadius: 1.5, flexShrink: 0 }}
             >

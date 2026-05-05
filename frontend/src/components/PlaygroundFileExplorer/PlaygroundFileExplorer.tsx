@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
 import { useSandpack } from '@codesandbox/sandpack-react'
-import { useCollabFs } from '../CollabSync'
+import { useCollabFs } from '../collabFsContext'
 import type { CollabPeerDTO } from '../../collab/collab.types'
 import { normalizeSandpackFilePath } from '../../collab/sandpackPaths'
 import { VITE_REACT_TS_PROTECTED } from './constants/playgroundFileExplorer.constants'
@@ -35,9 +35,7 @@ import {
 } from './utils/paths'
 import { sortUniqueFolderPaths } from './utils/sort'
 import './PlaygroundFileExplorer.css'
-import {
-  renderDraftRow as renderDraftRowUi,
-} from './ui/renderDraftRow'
+import { renderDraftRow as renderDraftRowUi } from './ui/renderDraftRow'
 import { renderFile as renderFileUi } from './ui/renderFile'
 import { renderFolder as renderFolderUi } from './ui/renderFolder'
 import { PlaygroundContextMenu } from './ui/PlaygroundContextMenu'
@@ -49,8 +47,14 @@ export function PlaygroundFileExplorer({
   collabPeers?: CollabPeerDTO[]
 } = {}) {
   const { sandpack } = useSandpack()
-  const { filePaths, folderPaths, snapshotReady, syncFolders, saveFile, removeFile } =
-    useCollabFs()
+  const {
+    filePaths,
+    folderPaths,
+    snapshotReady,
+    syncFolders,
+    saveFile,
+    removeFile,
+  } = useCollabFs()
   const editorInputRef = useRef<HTMLInputElement | null>(null)
   const draftSelectKeyRef = useRef<string | null>(null)
   const [collapsedFolders, setCollapsedFolders] = useState<string[]>([])
@@ -300,12 +304,9 @@ export function PlaygroundFileExplorer({
     [],
   )
 
-  const preventNativeContextMenu = useCallback(
-    (event: React.MouseEvent) => {
-      event.preventDefault()
-    },
-    [],
-  )
+  const preventNativeContextMenu = useCallback((event: React.MouseEvent) => {
+    event.preventDefault()
+  }, [])
 
   const handleCreateFileInRoot = useCallback(() => {
     startCreate('file', '/')

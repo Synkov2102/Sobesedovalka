@@ -21,10 +21,11 @@ export function buildPeersByActiveFile(
 
   for (const list of m.values()) {
     list.sort((a, b) =>
-      a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' }),
+      a.displayName.localeCompare(b.displayName, undefined, {
+        sensitivity: 'base',
+      }),
     )
   }
 
   return m
 }
-

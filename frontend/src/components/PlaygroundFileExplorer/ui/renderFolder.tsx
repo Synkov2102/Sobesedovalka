@@ -37,11 +37,17 @@ export function renderFolder({
   setDragItem: Dispatch<SetStateAction<DragItem | null>>
   setDropTargetPath: Dispatch<SetStateAction<string | null>>
   handleDropToFolder: (targetFolderPath: string) => void
-  openContextMenu: (event: MouseEvent<HTMLElement>, target: ContextMenuTarget) => void
+  openContextMenu: (
+    event: MouseEvent<HTMLElement>,
+    target: ContextMenuTarget,
+  ) => void
   renderDraftRowAtDepth: (depth: number) => ReactNode
   renderFileAtDepth: (file: ExplorerFileNode, depth: number) => ReactNode
 }) {
-  function renderFolderRecursive(node: ExplorerFolderNode, nextDepth: number): ReactNode {
+  function renderFolderRecursive(
+    node: ExplorerFolderNode,
+    nextDepth: number,
+  ): ReactNode {
     const collapsed = collapsedFolders.includes(node.path)
     const isFocused = focusedPath === node.path
     const isDropTarget = dropTargetPath === node.path
@@ -74,7 +80,8 @@ export function renderFolder({
       }
       if (
         dragItem.kind === 'folder' &&
-        (dragItem.path === node.path || isPathInFolder(node.path, dragItem.path))
+        (dragItem.path === node.path ||
+          isPathInFolder(node.path, dragItem.path))
       ) {
         return
       }
@@ -107,7 +114,9 @@ export function renderFolder({
 
     return (
       <div key={node.path} className="playground__treeGroup">
-        {draft?.mode === 'rename' && draft.kind === 'folder' && draft.path === node.path ? (
+        {draft?.mode === 'rename' &&
+        draft.kind === 'folder' &&
+        draft.path === node.path ? (
           renderDraftRowAtDepth(nextDepth)
         ) : (
           <div
@@ -133,7 +142,9 @@ export function renderFolder({
               onContextMenu={handleContextMenu}
               title={node.path}
             >
-              <span className="playground__treeIcon">{collapsed ? '>' : 'v'}</span>
+              <span className="playground__treeIcon">
+                {collapsed ? '>' : 'v'}
+              </span>
               <span className="playground__treeName">{node.name}</span>
             </button>
           </div>
@@ -154,4 +165,3 @@ export function renderFolder({
 
   return renderFolderRecursive(folder, depth)
 }
-

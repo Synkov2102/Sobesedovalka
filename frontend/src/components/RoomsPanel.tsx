@@ -71,8 +71,7 @@ export function RoomsPanel({ onOpenRoom }: RoomsPanelProps) {
   const [snackbarOpen, setSnackbarOpen] = useState(false)
 
   const isDeletingRoom =
-    deleteTarget !== null &&
-    busyKey === `delete:${deleteTarget.roomId}`
+    deleteTarget !== null && busyKey === `delete:${deleteTarget.roomId}`
 
   const load = useCallback(async () => {
     setLoading(true)

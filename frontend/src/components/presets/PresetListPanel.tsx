@@ -176,7 +176,11 @@ export function PresetListPanel({
           }}
         >
           <Box sx={{ minWidth: 0, flex: 1 }}>
-            <Stack direction="row" spacing={1} sx={{ mb: 1, alignItems: 'center' }}>
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{ mb: 1, alignItems: 'center' }}
+            >
               <TopicOutlinedIcon
                 sx={{
                   fontSize: 28,
@@ -300,12 +304,36 @@ export function PresetListPanel({
               }}
             >
               <Skeleton variant="text" width="48%" height={26} sx={{ mb: 1 }} />
-              <Skeleton variant="text" width="92%" height={18} sx={{ mb: 1.5 }} />
-              <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap', mb: 2 }}>
-                <Skeleton variant="rounded" width={72} height={24} sx={{ borderRadius: 2 }} />
-                <Skeleton variant="rounded" width={88} height={24} sx={{ borderRadius: 2 }} />
+              <Skeleton
+                variant="text"
+                width="92%"
+                height={18}
+                sx={{ mb: 1.5 }}
+              />
+              <Stack
+                direction="row"
+                spacing={0.75}
+                sx={{ flexWrap: 'wrap', mb: 2 }}
+              >
+                <Skeleton
+                  variant="rounded"
+                  width={72}
+                  height={24}
+                  sx={{ borderRadius: 2 }}
+                />
+                <Skeleton
+                  variant="rounded"
+                  width={88}
+                  height={24}
+                  sx={{ borderRadius: 2 }}
+                />
               </Stack>
-              <Skeleton variant="rounded" width={200} height={36} sx={{ borderRadius: 1.5 }} />
+              <Skeleton
+                variant="rounded"
+                width={200}
+                height={36}
+                sx={{ borderRadius: 1.5 }}
+              />
             </Paper>
           ))}
         </Stack>
@@ -353,7 +381,11 @@ export function PresetListPanel({
           </Button>
         </Paper>
       ) : (
-        <Stack spacing={2} component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
+        <Stack
+          spacing={2}
+          component="ul"
+          sx={{ listStyle: 'none', m: 0, p: 0 }}
+        >
           {presets.map((preset) => {
             const filePaths = Object.keys(preset.files).sort((a, b) =>
               a.localeCompare(b),

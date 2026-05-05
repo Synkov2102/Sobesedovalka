@@ -12,7 +12,7 @@ import { normalizeSandpackFilePath } from '../collab/sandpackPaths'
 import {
   CollabFsContext,
   type CollabFsContextValue,
-} from './CollabSync'
+} from './collabFsContext'
 import {
   getFoldersForFile,
   normalizeNewFolderPath,
