@@ -15,6 +15,7 @@ import {
 import type { TaskPresetFile } from '../../types/api.types'
 import { LocalSandpackFsProvider } from '../LocalSandpackFsProvider'
 import { PlaygroundFileExplorer } from '../PlaygroundFileExplorer'
+import { typescriptCodeEditorExtensions } from '../codeEditorExtensions'
 import '../Playground.css'
 
 const SKIP_PRESET_EXPORT_PATHS = new Set([
@@ -102,7 +103,12 @@ const PresetSandpackBindings = forwardRef<PresetSandpackWorkspaceHandle>(
         <div className="playground__providerInner">
           <SandpackLayout className="playground__sandpack">
             <PlaygroundFileExplorer />
-            <SandpackCodeEditor showTabs showLineNumbers closableTabs />
+            <SandpackCodeEditor
+              showTabs
+              showLineNumbers
+              closableTabs
+              extensions={typescriptCodeEditorExtensions}
+            />
             <SandpackPreview showNavigator showOpenInCodeSandbox={false} />
           </SandpackLayout>
         </div>

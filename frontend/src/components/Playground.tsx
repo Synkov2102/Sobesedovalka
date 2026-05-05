@@ -17,6 +17,10 @@ import {
   DEFAULT_SANDBOX_STYLES,
 } from '../sandbox/defaultFiles'
 import { v4 as uuidv4 } from 'uuid'
+import {
+  typescriptAdditionalLanguages,
+  typescriptCodeEditorExtensions,
+} from './codeEditorExtensions'
 import './Playground.css'
 
 type PlaygroundProps = {
@@ -221,7 +225,13 @@ export function Playground({ onInvalidExplicitRoom }: PlaygroundProps) {
             <div className="playground__providerInner">
               <SandpackLayout className="playground__sandpack">
                 <PlaygroundFileExplorer collabPeers={collabPeers} />
-                <SandpackCodeEditor showTabs showLineNumbers closableTabs />
+                <SandpackCodeEditor
+                  showTabs
+                  showLineNumbers
+                  closableTabs
+                  extensions={typescriptCodeEditorExtensions}
+                  additionalLanguages={typescriptAdditionalLanguages}
+                />
                 <SandpackPreview showNavigator showOpenInCodeSandbox={false} />
               </SandpackLayout>
             </div>
