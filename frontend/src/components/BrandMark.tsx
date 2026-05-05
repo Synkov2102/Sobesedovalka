@@ -1,55 +1,46 @@
 import Box, { type BoxProps } from '@mui/material/Box'
 
-const strokeProps = {
-  fill: 'none',
-  stroke: 'currentColor',
-  strokeWidth: 16,
-  strokeLinecap: 'round' as const,
-  strokeLinejoin: 'round' as const,
-}
-
 export type BrandMarkProps = {
-  /** Высота/ширина в px (viewBox квадратный). */
+  /** Базовый размер, если не задан через `sx`. */
   size?: number
   /** Для доступности при показе без текстовой метки рядом. */
   titleAccess?: string
   'aria-hidden'?: boolean
 } & Pick<BoxProps, 'sx'>
 
-/** Логотип-марк из двойной «С» (геометрический знак приложения). */
+/** Логотип приложения (`/logo.svg`, оранжевый акцент темы). */
 export function BrandMark({
   size = 36,
   titleAccess,
   'aria-hidden': ariaHidden = true,
   sx,
 }: BrandMarkProps) {
+  const alt = titleAccess ?? ''
+
   return (
     <Box
-      component="svg"
-      viewBox="0 0 220 220"
-      xmlns="http://www.w3.org/2000/svg"
-      role={titleAccess ? 'img' : undefined}
-      aria-hidden={ariaHidden ? true : undefined}
-      aria-label={titleAccess}
       sx={[
         {
-          width: size,
-          height: size,
+          lineHeight: 0,
           flexShrink: 0,
           display: 'block',
-          color: 'primary.main',
+          width: size,
+          height: size,
         },
         ...(sx ? (Array.isArray(sx) ? sx : [sx]) : []),
       ]}
     >
-      {titleAccess ? <title>{titleAccess}</title> : null}
-      <path
-        {...strokeProps}
-        d="M160 60 C120 30, 60 60, 60 110 C60 160, 120 190, 160 160"
-      />
-      <path
-        {...strokeProps}
-        d="M140 85 C115 65, 85 80, 85 110 C85 140, 115 155, 140 135"
+      <Box
+        component="img"
+        src="/logo.svg"
+        alt={ariaHidden && !titleAccess ? '' : alt}
+        aria-hidden={ariaHidden && !titleAccess ? true : undefined}
+        sx={{
+          width: '100%',
+          height: '100%',
+          display: 'block',
+          objectFit: 'contain',
+        }}
       />
     </Box>
   )

@@ -141,10 +141,13 @@ function syncSandpackSnapshot(
   sandpack: ReturnType<typeof useSandpack>['sandpack'],
   files: Record<string, string>,
 ) {
+  let touched = false
+
   Object.entries(files).forEach(([path, content]) => {
     const cur = getFileCode(sandpack.files[path])
     if (cur !== content) {
-      sandpack.updateFile(path, content, true)
+      sandpack.updateFile(path, content, false)
+      touched = true
     }
   })
 
@@ -152,8 +155,9 @@ function syncSandpackSnapshot(
     .filter((path) => !(path in files))
     .sort((a, b) => b.length - a.length)
 
-  pathsToDelete.forEach((path, index) => {
-    sandpack.deleteFile(path, index === pathsToDelete.length - 1)
+  pathsToDelete.forEach((path) => {
+    sandpack.deleteFile(path, false)
+    touched = true
   })
 
   const nextActive = normalizeSandpackFilePath(sandpack.activeFile ?? '')
@@ -162,6 +166,12 @@ function syncSandpackSnapshot(
     if (firstPath) {
       sandpack.openFile(firstPath)
     }
+  }
+
+  if (touched) {
+    queueMicrotask(() => {
+      void sandpack.runSandpack()
+    })
   }
 }
 

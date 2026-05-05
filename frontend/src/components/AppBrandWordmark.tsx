@@ -22,8 +22,8 @@ export function AppBrandWordmark({ onNavigateHome }: AppBrandWordmarkProps) {
     <Stack direction="row" spacing={0} sx={{ alignItems: 'center' }}>
       <BrandMark
         sx={{
-          width: { xs: 30, sm: 34 },
-          height: { xs: 30, sm: 34 },
+          width: { xs: 36, sm: 40 },
+          height: { xs: 36, sm: 40 },
         }}
       />
       <Typography component="span" variant="h6" sx={wordmarkSx}>
@@ -44,8 +44,8 @@ export function AppBrandWordmark({ onNavigateHome }: AppBrandWordmarkProps) {
           '&:hover .MuiTypography-root': {
             color: 'primary.light',
           },
-          '&:hover svg': {
-            color: 'primary.light',
+          '&:hover img': {
+            filter: 'brightness(1.15)',
           },
         }}
       >

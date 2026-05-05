@@ -137,6 +137,8 @@ export function Playground({ onInvalidExplicitRoom }: PlaygroundProps) {
       autorun: true,
       autoReload: true,
       recompileMode: 'immediate' as const,
+      /** Иначе превью может собраться по шаблону до прихода collab-snapshot. */
+      initMode: 'immediate' as const,
     }),
     [],
   )
