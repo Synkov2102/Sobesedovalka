@@ -278,6 +278,71 @@ export class CollabGateway implements OnGatewayDisconnect {
     void body;
   }
 
+  @SubscribeMessage('collab-paste')
+  handlePaste(
+    @MessageBody()
+    body: {
+      room?: string;
+      clientId?: string;
+      path?: string;
+      content?: string;
+      fileContent?: string;
+      insertStartOffset?: number;
+      insertEndOffset?: number;
+      line?: number;
+      col?: number;
+    },
+  ): void {
+    const room = typeof body?.room === 'string' ? body.room : '';
+    const clientId = typeof body?.clientId === 'string' ? body.clientId : '';
+    const path =
+      typeof body?.path === 'string'
+        ? normalizeSandpackFilePath(body.path)
+        : '';
+    const content = typeof body?.content === 'string' ? body.content : '';
+    const fileContent =
+      typeof body?.fileContent === 'string' ? body.fileContent : content;
+    if (!room || !clientId || !path || !content) {
+      return;
+    }
+
+    const fallbackStart =
+      typeof body.insertStartOffset === 'number' &&
+      Number.isFinite(body.insertStartOffset)
+        ? Math.max(0, Math.floor(body.insertStartOffset))
+        : 0;
+    const startOffset = Math.min(fallbackStart, fileContent.length);
+    const rawEndOffset =
+      typeof body.insertEndOffset === 'number' &&
+      Number.isFinite(body.insertEndOffset)
+        ? Math.max(startOffset, Math.floor(body.insertEndOffset))
+        : startOffset + content.length;
+    const endOffset = Math.min(rawEndOffset, fileContent.length);
+    const peer = this.roomPeers.get(room)?.get(clientId);
+    void this.mongoRepo
+      .insertPasteEvent({
+        roomId: room,
+        clientId,
+        displayName: peer?.displayName ?? clientId,
+        path,
+        content,
+        fileContent,
+        contentLength: content.length,
+        truncated: false,
+        insertStartOffset: startOffset,
+        insertEndOffset: endOffset,
+        line:
+          typeof body.line === 'number' && Number.isFinite(body.line)
+            ? Math.max(1, Math.floor(body.line))
+            : 1,
+        col:
+          typeof body.col === 'number' && Number.isFinite(body.col)
+            ? Math.max(1, Math.floor(body.col))
+            : 1,
+      })
+      .catch((e: unknown) => this.logger.warn(String(e)));
+  }
+
   @SubscribeMessage('collab-file')
   handleFile(
     @MessageBody()

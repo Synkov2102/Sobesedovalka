@@ -22,6 +22,10 @@ import { readSandpackSelection } from '../collab/sandpackCursor'
 import { getAccessToken } from '../auth/tokenStorage'
 import { CollabFsContext } from './collabFsContext'
 import {
+  CollabPasteContext,
+  type CollabPasteEventInput,
+} from './collabPasteContext'
+import {
   getFoldersForFile,
   normalizeNewFolderPath,
 } from './PlaygroundFileExplorer/utils/paths'
@@ -263,6 +267,27 @@ export function CollabSync({
         path: normalizedPath,
         content,
         from: clientId,
+      })
+    },
+    [clientId, room],
+  )
+
+  const recordPaste = useCallback(
+    (event: CollabPasteEventInput) => {
+      const normalizedPath = normalizeSandpackFilePath(event.path)
+      if (!normalizedPath || !event.content) {
+        return
+      }
+      socketRef.current?.emit('collab-paste', {
+        room,
+        clientId,
+        path: normalizedPath,
+        content: event.content,
+        fileContent: event.fileContent,
+        insertStartOffset: event.insertStartOffset,
+        insertEndOffset: event.insertEndOffset,
+        line: event.line,
+        col: event.col,
       })
     },
     [clientId, room],
@@ -665,9 +690,18 @@ export function CollabSync({
     [filePaths, folderPaths, removeFile, saveFile, snapshotReady, syncFolders],
   )
 
+  const pasteContextValue = useMemo(
+    () => ({
+      recordPaste,
+    }),
+    [recordPaste],
+  )
+
   return (
     <CollabFsContext.Provider value={contextValue}>
-      {children ?? null}
+      <CollabPasteContext.Provider value={pasteContextValue}>
+        {children ?? null}
+      </CollabPasteContext.Provider>
     </CollabFsContext.Provider>
   )
 }

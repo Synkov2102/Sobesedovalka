@@ -22,6 +22,21 @@ export type CollabRoomSummary = {
   updatedAt: string
 }
 
+export type CollabPasteEvent = {
+  clientId: string
+  displayName: string
+  path: string
+  content: string
+  fileContent: string
+  contentLength: number
+  truncated: boolean
+  insertStartOffset: number
+  insertEndOffset: number
+  line: number
+  col: number
+  createdAt: string
+}
+
 export type AuthUser = {
   id: string
   email?: string

@@ -9,6 +9,7 @@ import {
 import type {
   CollabFileDoc,
   CollabFolderDoc,
+  CollabPasteEventDoc,
   CollabPeerDoc,
   CollabRoomDoc,
 } from './collab-mongo.types';
@@ -16,6 +17,7 @@ import type { RoomPeer } from './collab.types';
 
 const FILES = 'collab_files';
 const FOLDERS = 'collab_folders';
+const PASTE_EVENTS = 'collab_paste_events';
 const PEERS = 'collab_peers';
 const ROOMS = 'collab_rooms';
 
@@ -45,6 +47,10 @@ export class CollabMongoRepository implements OnModuleInit {
     return this.mongo.getDb().collection<CollabPeerDoc>(PEERS);
   }
 
+  private pasteEvents(): Collection<CollabPasteEventDoc> {
+    return this.mongo.getDb().collection<CollabPasteEventDoc>(PASTE_EVENTS);
+  }
+
   private rooms(): Collection<CollabRoomDoc> {
     return this.mongo.getDb().collection<CollabRoomDoc>(ROOMS);
   }
@@ -52,6 +58,7 @@ export class CollabMongoRepository implements OnModuleInit {
   private async ensureIndexes(): Promise<void> {
     await this.files().createIndex({ roomId: 1, path: 1 }, { unique: true });
     await this.folders().createIndex({ roomId: 1, path: 1 }, { unique: true });
+    await this.pasteEvents().createIndex({ roomId: 1, createdAt: -1 });
     await this.peers().createIndex({ roomId: 1, clientId: 1 }, { unique: true });
     await this.rooms().createIndex({ updatedAt: -1 });
     await this.rooms().createIndex({ ownerUserId: 1, updatedAt: -1 });
@@ -212,6 +219,31 @@ export class CollabMongoRepository implements OnModuleInit {
       .toArray();
   }
 
+  async roomBelongsToOwner(roomId: string, userId: string): Promise<boolean> {
+    const room = await this.rooms().findOne(
+      { _id: roomId },
+      { projection: { ownerUserId: 1 } },
+    );
+    return room?.ownerUserId === userId;
+  }
+
+  async insertPasteEvent(
+    event: Omit<CollabPasteEventDoc, 'createdAt'> & { createdAt?: Date },
+  ): Promise<void> {
+    await this.pasteEvents().insertOne({
+      ...event,
+      createdAt: event.createdAt ?? new Date(),
+    });
+  }
+
+  async listPasteEvents(roomId: string): Promise<CollabPasteEventDoc[]> {
+    return this.pasteEvents()
+      .find({ roomId })
+      .sort({ createdAt: -1 })
+      .limit(500)
+      .toArray();
+  }
+
   /**
    * Удаляет комнату и все связанные файлы, папки и пиры.
    * Только если владелец комнаты совпадает с userId.
@@ -229,6 +261,7 @@ export class CollabMongoRepository implements OnModuleInit {
     }
     await this.files().deleteMany({ roomId });
     await this.folders().deleteMany({ roomId });
+    await this.pasteEvents().deleteMany({ roomId });
     await this.peers().deleteMany({ roomId });
     await this.rooms().deleteOne({ _id: roomId });
     return 'deleted';

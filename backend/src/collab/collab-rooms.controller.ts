@@ -37,6 +37,25 @@ export class CollabRoomsController {
     return this.service.createBlank(req.user.userId);
   }
 
+  @Get(':roomId/paste-events')
+  async listPasteEvents(
+    @Req() req: AuthedRequest,
+    @Param('roomId') roomIdRaw: string,
+  ) {
+    const roomId = normalizeCollabRoomIdParam(roomIdRaw);
+    if (!roomId) {
+      throw new BadRequestException('Некорректный идентификатор комнаты');
+    }
+    const result = await this.service.listPasteEventsMine(
+      roomId,
+      req.user.userId,
+    );
+    if (result === 'forbidden') {
+      throw new ForbiddenException('Нет прав на просмотр этой комнаты');
+    }
+    return result;
+  }
+
   @Delete(':roomId')
   async remove(
     @Req() req: AuthedRequest,

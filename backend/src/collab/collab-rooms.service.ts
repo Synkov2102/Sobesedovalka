@@ -13,6 +13,21 @@ export type CollabRoomSummaryDto = {
   updatedAt: string;
 };
 
+export type CollabPasteEventDto = {
+  clientId: string;
+  displayName: string;
+  path: string;
+  content: string;
+  fileContent: string;
+  contentLength: number;
+  truncated: boolean;
+  insertStartOffset: number;
+  insertEndOffset: number;
+  line: number;
+  col: number;
+  createdAt: string;
+};
+
 @Injectable()
 export class CollabRoomsService {
   constructor(private readonly collabRepo: CollabMongoRepository) {}
@@ -55,5 +70,30 @@ export class CollabRoomsService {
     userId: string,
   ): Promise<'deleted' | 'not_found' | 'forbidden'> {
     return this.collabRepo.deleteRoomForOwner(roomId, userId);
+  }
+
+  async listPasteEventsMine(
+    roomId: string,
+    userId: string,
+  ): Promise<CollabPasteEventDto[] | 'forbidden'> {
+    const canRead = await this.collabRepo.roomBelongsToOwner(roomId, userId);
+    if (!canRead) {
+      return 'forbidden';
+    }
+    const docs = await this.collabRepo.listPasteEvents(roomId);
+    return docs.map((event) => ({
+      clientId: event.clientId,
+      displayName: event.displayName,
+      path: event.path,
+      content: event.content,
+      fileContent: event.fileContent ?? event.content,
+      contentLength: event.contentLength,
+      truncated: event.truncated,
+      insertStartOffset: event.insertStartOffset ?? 0,
+      insertEndOffset: event.insertEndOffset ?? event.content.length,
+      line: event.line,
+      col: event.col,
+      createdAt: event.createdAt.toISOString(),
+    }));
   }
 }

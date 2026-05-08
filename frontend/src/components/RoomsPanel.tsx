@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded'
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
+import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded'
 import MeetingRoomOutlinedIcon from '@mui/icons-material/MeetingRoomOutlined'
 import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded'
 import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded'
@@ -29,13 +30,21 @@ import { alpha, useTheme } from '@mui/material/styles'
 import {
   createCollabRoom,
   deleteCollabRoom,
+  fetchCollabPasteEvents,
   fetchCollabRooms,
 } from '../api/collabRooms'
 import { sectionSurfacePaddingSx } from '../theme/layout'
-import type { CollabRoomSummary } from '../types/api.types'
+import type { CollabPasteEvent, CollabRoomSummary } from '../types/api.types'
 
 type RoomsPanelProps = {
   onOpenRoom: (roomId: string) => void
+}
+
+type RoomHistoryEntry = {
+  id: string
+  kind: 'paste'
+  createdAt: string
+  event: CollabPasteEvent
 }
 
 function formatRoomUpdated(iso: string): string {
@@ -58,6 +67,39 @@ function buildInviteUrl(roomId: string): string {
   return u.toString()
 }
 
+function buildRoomHistoryEntries(
+  pasteEvents: CollabPasteEvent[] | null,
+): RoomHistoryEntry[] {
+  return (pasteEvents ?? [])
+    .map((event, index) => ({
+      id: `paste:${event.createdAt}:${event.clientId}:${index}`,
+      kind: 'paste' as const,
+      createdAt: event.createdAt,
+      event,
+    }))
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )
+}
+
+function getPasteFileSegments(event: CollabPasteEvent) {
+  const fileContent = event.fileContent || event.content
+  const start = Math.min(
+    Math.max(0, event.insertStartOffset ?? 0),
+    fileContent.length,
+  )
+  const end = Math.min(
+    Math.max(start, event.insertEndOffset ?? start + event.content.length),
+    fileContent.length,
+  )
+  return {
+    before: fileContent.slice(0, start),
+    inserted: fileContent.slice(start, end),
+    after: fileContent.slice(end),
+  }
+}
+
 export function RoomsPanel({ onOpenRoom }: RoomsPanelProps) {
   const theme = useTheme()
   const [rooms, setRooms] = useState<CollabRoomSummary[] | null>(null)
@@ -68,10 +110,19 @@ export function RoomsPanel({ onOpenRoom }: RoomsPanelProps) {
   const [deleteTarget, setDeleteTarget] = useState<CollabRoomSummary | null>(
     null,
   )
+  const [historyTarget, setHistoryTarget] = useState<CollabRoomSummary | null>(
+    null,
+  )
+  const [pasteEvents, setPasteEvents] = useState<CollabPasteEvent[] | null>(
+    null,
+  )
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState<string | null>(null)
   const [snackbarOpen, setSnackbarOpen] = useState(false)
 
   const isDeletingRoom =
     deleteTarget !== null && busyKey === `delete:${deleteTarget.roomId}`
+  const historyEntries = buildRoomHistoryEntries(pasteEvents)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -147,6 +198,26 @@ export function RoomsPanel({ onOpenRoom }: RoomsPanelProps) {
       setError(
         'Не удалось скопировать ссылку — разрешите доступ к буферу обмена',
       )
+    }
+  }
+
+  async function openRoomHistory(room: CollabRoomSummary) {
+    setHistoryTarget(room)
+    setPasteEvents(null)
+    setHistoryError(null)
+    setHistoryLoading(true)
+    try {
+      const events = await fetchCollabPasteEvents(room.roomId)
+      setPasteEvents(events)
+    } catch (err) {
+      setHistoryError(
+        err instanceof Error
+          ? err.message
+          : 'Не удалось загрузить историю комнаты',
+      )
+      setPasteEvents([])
+    } finally {
+      setHistoryLoading(false)
     }
   }
 
@@ -527,6 +598,20 @@ export function RoomsPanel({ onOpenRoom }: RoomsPanelProps) {
                       </IconButton>
                     </Tooltip>
                     <Button
+                      variant="outlined"
+                      color="secondary"
+                      startIcon={<HistoryRoundedIcon sx={{ fontSize: 18 }} />}
+                      disabled={busyKey !== null}
+                      onClick={() => void openRoomHistory(room)}
+                      sx={{
+                        px: 1.75,
+                        borderRadius: 1.5,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      История комнаты
+                    </Button>
+                    <Button
                       variant="contained"
                       color="primary"
                       endIcon={<OpenInNewRoundedIcon sx={{ fontSize: 18 }} />}
@@ -596,6 +681,165 @@ export function RoomsPanel({ onOpenRoom }: RoomsPanelProps) {
             ) : (
               'Удалить'
             )}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={historyTarget !== null}
+        onClose={() => setHistoryTarget(null)}
+        maxWidth="md"
+        fullWidth
+        aria-labelledby="rooms-history-dialog-title"
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 2,
+              border: `1px solid ${theme.palette.divider}`,
+            },
+          },
+        }}
+      >
+        <DialogTitle id="rooms-history-dialog-title">
+          История комнаты «{historyTarget?.title ?? ''}»
+        </DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ mb: 2 }}>
+            <Typography variant="body2" color="text.secondary">
+              Здесь собираются ключевые моменты комнаты. Сейчас показываем
+              вставки пользователей; уходы со страницы добавим позже.
+            </Typography>
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{ flexWrap: 'wrap', gap: 1 }}
+            >
+              <Chip
+                size="small"
+                color="primary"
+                variant="outlined"
+                label={`Вставки: ${pasteEvents?.length ?? 0}`}
+              />
+              <Chip
+                size="small"
+                variant="outlined"
+                label="Уходы со страницы: скоро"
+              />
+            </Stack>
+          </Stack>
+          {historyLoading ? (
+            <Stack
+              spacing={1.5}
+              sx={{ alignItems: 'center', justifyContent: 'center', py: 5 }}
+            >
+              <CircularProgress size={28} />
+              <Typography variant="body2" color="text.secondary">
+                Загружаем историю комнаты…
+              </Typography>
+            </Stack>
+          ) : historyError ? (
+            <Alert severity="error">{historyError}</Alert>
+          ) : !historyEntries.length ? (
+            <Typography color="text.secondary">
+              В этой комнате пока нет зафиксированных ключевых событий.
+            </Typography>
+          ) : (
+            <Stack spacing={2}>
+              {historyEntries.map((entry) => {
+                const segments = getPasteFileSegments(entry.event)
+                return (
+                  <Paper
+                    key={entry.id}
+                    variant="outlined"
+                    sx={{
+                      p: 2,
+                      borderRadius: 2,
+                      borderColor: 'divider',
+                      bgcolor: alpha(theme.palette.background.paper, 0.7),
+                    }}
+                  >
+                    <Stack spacing={1}>
+                      <Stack
+                        direction={{ xs: 'column', sm: 'row' }}
+                        spacing={1}
+                        sx={{
+                          justifyContent: 'space-between',
+                          alignItems: { xs: 'flex-start', sm: 'center' },
+                        }}
+                      >
+                        <Stack spacing={0.75}>
+                          <Chip
+                            size="small"
+                            color="secondary"
+                            variant="outlined"
+                            label="Вставка пользователя"
+                            sx={{ alignSelf: 'flex-start' }}
+                          />
+                          <Typography
+                            variant="subtitle2"
+                            sx={{ fontWeight: 700 }}
+                          >
+                            {entry.event.displayName}
+                          </Typography>
+                        </Stack>
+                        <Typography variant="caption" color="text.secondary">
+                          {formatRoomUpdated(entry.event.createdAt)}
+                        </Typography>
+                      </Stack>
+                      <Typography variant="caption" color="text.secondary">
+                        {entry.event.path}:{entry.event.line}:{entry.event.col}{' '}
+                        · файл после вставки
+                      </Typography>
+                      <Box
+                        component="pre"
+                        sx={{
+                          m: 0,
+                          p: 1.5,
+                          borderRadius: 1.5,
+                          bgcolor: alpha(theme.palette.common.black, 0.28),
+                          color: 'text.primary',
+                          fontFamily:
+                            'ui-monospace, SFMono-Regular, Consolas, monospace',
+                          fontSize: '0.8rem',
+                          lineHeight: 1.55,
+                          maxHeight: 360,
+                          overflow: 'auto',
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                        }}
+                      >
+                        {segments.before}
+                        <Box
+                          component="span"
+                          sx={{
+                            bgcolor: alpha(theme.palette.success.main, 0.32),
+                            color: 'success.light',
+                            borderRadius: 0.5,
+                          }}
+                        >
+                          {segments.inserted}
+                        </Box>
+                        {segments.after}
+                      </Box>
+                      {entry.event.truncated ? (
+                        <Typography variant="caption" color="text.secondary">
+                          Показаны первые {entry.event.content.length} символов
+                          из {entry.event.contentLength}.
+                        </Typography>
+                      ) : null}
+                    </Stack>
+                  </Paper>
+                )
+              })}
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button
+            onClick={() => setHistoryTarget(null)}
+            sx={{ borderRadius: 1.5 }}
+          >
+            Закрыть
           </Button>
         </DialogActions>
       </Dialog>

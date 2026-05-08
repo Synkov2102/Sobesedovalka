@@ -1,17 +1,27 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useTheme } from '@mui/material/styles'
 import {
   SandpackProvider,
   SandpackLayout,
   SandpackCodeEditor,
   SandpackPreview,
+  useSandpack,
 } from '@codesandbox/sandpack-react'
+import { EditorView } from '@codemirror/view'
 import { fetchCollabRoomReady } from '../api/taskPresets'
 import type { CollabPeerDTO } from '../collab/collab.types'
 import { CollabSync } from './CollabSync'
 import { PeerCaretsOverlay } from './PeerCaretsOverlay'
 import { PlaygroundCollabBar } from './PlaygroundCollabBar'
 import { PlaygroundFileExplorer } from './PlaygroundFileExplorer'
+import { useCollabPaste } from './collabPasteContext'
 import { DEFAULT_SANDBOX_FILES } from '../sandbox/defaultFiles'
 import { v4 as uuidv4 } from 'uuid'
 import {
@@ -67,6 +77,61 @@ function useStableCollabClientId(): string {
       return uuidv4()
     }
   }, [])
+}
+
+function PasteTrackingCodeEditor() {
+  const { sandpack } = useSandpack()
+  const paste = useCollabPaste()
+  const activeFileRef = useRef(sandpack.activeFile ?? '')
+  const recordPasteRef = useRef(paste?.recordPaste)
+
+  useLayoutEffect(() => {
+    activeFileRef.current = sandpack.activeFile ?? ''
+    recordPasteRef.current = paste?.recordPaste
+  }, [paste?.recordPaste, sandpack.activeFile])
+
+  const editorExtensions = useMemo(
+    () => [
+      ...typescriptCodeEditorExtensions,
+      EditorView.domEventHandlers({
+        paste(event, view) {
+          const content = event.clipboardData?.getData('text/plain') ?? ''
+          const recordPaste = recordPasteRef.current
+          const path = activeFileRef.current
+          if (!content || !recordPaste || !path) {
+            return
+          }
+
+          const selection = view.state.selection.main
+          const insertStartOffset = selection.from
+          const insertEndOffset = insertStartOffset + content.length
+          const line = view.state.doc.lineAt(insertStartOffset)
+          const before = view.state.doc.sliceString(0, selection.from)
+          const after = view.state.doc.sliceString(selection.to)
+          recordPaste({
+            path,
+            content,
+            fileContent: `${before}${content}${after}`,
+            insertStartOffset,
+            insertEndOffset,
+            line: line.number,
+            col: insertStartOffset - line.from + 1,
+          })
+        },
+      }),
+    ],
+    [],
+  )
+
+  return (
+    <SandpackCodeEditor
+      showTabs
+      showLineNumbers
+      closableTabs
+      extensions={editorExtensions}
+      additionalLanguages={typescriptAdditionalLanguages}
+    />
+  )
 }
 
 export function Playground({ onInvalidExplicitRoom }: PlaygroundProps) {
@@ -227,13 +292,7 @@ export function Playground({ onInvalidExplicitRoom }: PlaygroundProps) {
             <div className="playground__providerInner">
               <SandpackLayout className="playground__sandpack">
                 <PlaygroundFileExplorer collabPeers={collabPeers} />
-                <SandpackCodeEditor
-                  showTabs
-                  showLineNumbers
-                  closableTabs
-                  extensions={typescriptCodeEditorExtensions}
-                  additionalLanguages={typescriptAdditionalLanguages}
-                />
+                <PasteTrackingCodeEditor />
                 <SandpackPreview showNavigator showOpenInCodeSandbox={false} />
               </SandpackLayout>
             </div>

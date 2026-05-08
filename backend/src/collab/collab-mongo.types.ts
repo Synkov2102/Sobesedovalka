@@ -28,6 +28,23 @@ export type CollabPeerDoc = {
   updatedAt: Date;
 };
 
+/** One paste action made by a participant during an interview room session. */
+export type CollabPasteEventDoc = {
+  roomId: string;
+  clientId: string;
+  displayName: string;
+  path: string;
+  content: string;
+  fileContent: string;
+  contentLength: number;
+  truncated: boolean;
+  insertStartOffset: number;
+  insertEndOffset: number;
+  line: number;
+  col: number;
+  createdAt: Date;
+};
+
 /** Room metadata (created on first activity). */
 export type CollabRoomDoc = {
   _id: string;
