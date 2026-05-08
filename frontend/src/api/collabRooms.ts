@@ -1,4 +1,8 @@
-import type { CollabPasteEvent, CollabRoomSummary } from '../types/api.types'
+import type {
+  CollabPageLeaveEvent,
+  CollabPasteEvent,
+  CollabRoomSummary,
+} from '../types/api.types'
 import { apiFetch } from './apiFetch'
 
 async function readApiError(res: Response): Promise<string> {
@@ -55,4 +59,15 @@ export async function fetchCollabPasteEvents(
     throw new Error(await readApiError(res))
   }
   return (await res.json()) as CollabPasteEvent[]
+}
+
+export async function fetchCollabPageLeaveEvents(
+  roomId: string,
+): Promise<CollabPageLeaveEvent[]> {
+  const encoded = encodeURIComponent(roomId)
+  const res = await apiFetch(`/collab-rooms/${encoded}/page-leave-events`)
+  if (!res.ok) {
+    throw new Error(await readApiError(res))
+  }
+  return (await res.json()) as CollabPageLeaveEvent[]
 }

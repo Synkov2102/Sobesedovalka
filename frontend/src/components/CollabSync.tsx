@@ -85,6 +85,7 @@ function isFsRemove(m: unknown): m is FsRemove {
  * stale snapshots from debounced peers overwriting fast typing. */
 const REMOTE_FILE_GUARD_MS = 420
 const COLLAB_FILE_DEBOUNCE_MS = 320
+const PAGE_LEAVE_EVENT_COOLDOWN_MS = 5000
 
 /** Drop stale peer payloads: local doc strictly extended what remote still has. */
 function isStaleShorterPrefix(
@@ -181,6 +182,22 @@ function syncSandpackSnapshot(
 
 function sortPaths(paths: string[]): string[] {
   return Array.from(new Set(paths)).sort((a, b) => a.localeCompare(b))
+}
+
+function isMouseLeavingViewport(event: MouseEvent): boolean {
+  const nextTarget = event.relatedTarget ?? (event as MouseEvent & {
+    toElement?: EventTarget | null
+  }).toElement
+  if (nextTarget) {
+    return false
+  }
+
+  return (
+    event.clientX <= 0 ||
+    event.clientY <= 0 ||
+    event.clientX >= window.innerWidth ||
+    event.clientY >= window.innerHeight
+  )
 }
 
 export function CollabSync({
@@ -676,6 +693,43 @@ export function CollabSync({
       })
     }, 120)
     return () => window.clearInterval(id)
+  }, [sandpack.status, room, clientId])
+
+  useEffect(() => {
+    if (sandpack.status !== 'running') {
+      return
+    }
+
+    let cursorInsidePage = true
+    let lastPageLeaveAt = 0
+
+    const emitPageLeave = () => {
+      const now = Date.now()
+      if (now - lastPageLeaveAt < PAGE_LEAVE_EVENT_COOLDOWN_MS) {
+        return
+      }
+      lastPageLeaveAt = now
+      socketRef.current?.emit('collab-page-leave', { room, clientId })
+    }
+
+    const onMouseOut = (event: MouseEvent) => {
+      if (!cursorInsidePage || !isMouseLeavingViewport(event)) {
+        return
+      }
+      cursorInsidePage = false
+      emitPageLeave()
+    }
+
+    const onMouseOver = () => {
+      cursorInsidePage = true
+    }
+
+    document.addEventListener('mouseout', onMouseOut)
+    document.addEventListener('mouseover', onMouseOver)
+    return () => {
+      document.removeEventListener('mouseout', onMouseOut)
+      document.removeEventListener('mouseover', onMouseOver)
+    }
   }, [sandpack.status, room, clientId])
 
   const contextValue = useMemo(

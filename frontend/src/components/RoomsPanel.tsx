@@ -30,22 +30,34 @@ import { alpha, useTheme } from '@mui/material/styles'
 import {
   createCollabRoom,
   deleteCollabRoom,
+  fetchCollabPageLeaveEvents,
   fetchCollabPasteEvents,
   fetchCollabRooms,
 } from '../api/collabRooms'
 import { sectionSurfacePaddingSx } from '../theme/layout'
-import type { CollabPasteEvent, CollabRoomSummary } from '../types/api.types'
+import type {
+  CollabPageLeaveEvent,
+  CollabPasteEvent,
+  CollabRoomSummary,
+} from '../types/api.types'
 
 type RoomsPanelProps = {
   onOpenRoom: (roomId: string) => void
 }
 
-type RoomHistoryEntry = {
-  id: string
-  kind: 'paste'
-  createdAt: string
-  event: CollabPasteEvent
-}
+type RoomHistoryEntry =
+  | {
+      id: string
+      kind: 'paste'
+      createdAt: string
+      event: CollabPasteEvent
+    }
+  | {
+      id: string
+      kind: 'page-leave'
+      createdAt: string
+      event: CollabPageLeaveEvent
+    }
 
 function formatRoomUpdated(iso: string): string {
   try {
@@ -69,18 +81,25 @@ function buildInviteUrl(roomId: string): string {
 
 function buildRoomHistoryEntries(
   pasteEvents: CollabPasteEvent[] | null,
+  pageLeaveEvents: CollabPageLeaveEvent[] | null,
 ): RoomHistoryEntry[] {
-  return (pasteEvents ?? [])
-    .map((event, index) => ({
-      id: `paste:${event.createdAt}:${event.clientId}:${index}`,
-      kind: 'paste' as const,
-      createdAt: event.createdAt,
-      event,
-    }))
-    .sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    )
+  const pasteEntries = (pasteEvents ?? []).map((event, index) => ({
+    id: `paste:${event.createdAt}:${event.clientId}:${index}`,
+    kind: 'paste' as const,
+    createdAt: event.createdAt,
+    event,
+  }))
+  const pageLeaveEntries = (pageLeaveEvents ?? []).map((event, index) => ({
+    id: `page-leave:${event.createdAt}:${event.clientId}:${index}`,
+    kind: 'page-leave' as const,
+    createdAt: event.createdAt,
+    event,
+  }))
+
+  return [...pasteEntries, ...pageLeaveEntries].sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  )
 }
 
 function getPasteFileSegments(event: CollabPasteEvent) {
@@ -116,13 +135,16 @@ export function RoomsPanel({ onOpenRoom }: RoomsPanelProps) {
   const [pasteEvents, setPasteEvents] = useState<CollabPasteEvent[] | null>(
     null,
   )
+  const [pageLeaveEvents, setPageLeaveEvents] = useState<
+    CollabPageLeaveEvent[] | null
+  >(null)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState<string | null>(null)
   const [snackbarOpen, setSnackbarOpen] = useState(false)
 
   const isDeletingRoom =
     deleteTarget !== null && busyKey === `delete:${deleteTarget.roomId}`
-  const historyEntries = buildRoomHistoryEntries(pasteEvents)
+  const historyEntries = buildRoomHistoryEntries(pasteEvents, pageLeaveEvents)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -204,11 +226,16 @@ export function RoomsPanel({ onOpenRoom }: RoomsPanelProps) {
   async function openRoomHistory(room: CollabRoomSummary) {
     setHistoryTarget(room)
     setPasteEvents(null)
+    setPageLeaveEvents(null)
     setHistoryError(null)
     setHistoryLoading(true)
     try {
-      const events = await fetchCollabPasteEvents(room.roomId)
+      const [events, leaveEvents] = await Promise.all([
+        fetchCollabPasteEvents(room.roomId),
+        fetchCollabPageLeaveEvents(room.roomId),
+      ])
       setPasteEvents(events)
+      setPageLeaveEvents(leaveEvents)
     } catch (err) {
       setHistoryError(
         err instanceof Error
@@ -216,6 +243,7 @@ export function RoomsPanel({ onOpenRoom }: RoomsPanelProps) {
           : 'Не удалось загрузить историю комнаты',
       )
       setPasteEvents([])
+      setPageLeaveEvents([])
     } finally {
       setHistoryLoading(false)
     }
@@ -706,8 +734,8 @@ export function RoomsPanel({ onOpenRoom }: RoomsPanelProps) {
         <DialogContent dividers>
           <Stack spacing={2} sx={{ mb: 2 }}>
             <Typography variant="body2" color="text.secondary">
-              Здесь собираются ключевые моменты комнаты. Сейчас показываем
-              вставки пользователей; уходы со страницы добавим позже.
+              Здесь собираются ключевые моменты комнаты: вставки пользователей и
+              уходы курсора со страницы собеседования.
             </Typography>
             <Stack
               direction="row"
@@ -723,7 +751,7 @@ export function RoomsPanel({ onOpenRoom }: RoomsPanelProps) {
               <Chip
                 size="small"
                 variant="outlined"
-                label="Уходы со страницы: скоро"
+                label={`Уходы со страницы: ${pageLeaveEvents?.length ?? 0}`}
               />
             </Stack>
           </Stack>
@@ -746,7 +774,10 @@ export function RoomsPanel({ onOpenRoom }: RoomsPanelProps) {
           ) : (
             <Stack spacing={2}>
               {historyEntries.map((entry) => {
-                const segments = getPasteFileSegments(entry.event)
+                const segments =
+                  entry.kind === 'paste'
+                    ? getPasteFileSegments(entry.event)
+                    : null
                 return (
                   <Paper
                     key={entry.id}
@@ -770,9 +801,15 @@ export function RoomsPanel({ onOpenRoom }: RoomsPanelProps) {
                         <Stack spacing={0.75}>
                           <Chip
                             size="small"
-                            color="secondary"
+                            color={
+                              entry.kind === 'paste' ? 'secondary' : 'warning'
+                            }
                             variant="outlined"
-                            label="Вставка пользователя"
+                            label={
+                              entry.kind === 'paste'
+                                ? 'Вставка пользователя'
+                                : 'Курсор ушёл со страницы'
+                            }
                             sx={{ alignSelf: 'flex-start' }}
                           />
                           <Typography
@@ -786,47 +823,65 @@ export function RoomsPanel({ onOpenRoom }: RoomsPanelProps) {
                           {formatRoomUpdated(entry.event.createdAt)}
                         </Typography>
                       </Stack>
-                      <Typography variant="caption" color="text.secondary">
-                        {entry.event.path}:{entry.event.line}:{entry.event.col}{' '}
-                        · файл после вставки
-                      </Typography>
-                      <Box
-                        component="pre"
-                        sx={{
-                          m: 0,
-                          p: 1.5,
-                          borderRadius: 1.5,
-                          bgcolor: alpha(theme.palette.common.black, 0.28),
-                          color: 'text.primary',
-                          fontFamily:
-                            'ui-monospace, SFMono-Regular, Consolas, monospace',
-                          fontSize: '0.8rem',
-                          lineHeight: 1.55,
-                          maxHeight: 360,
-                          overflow: 'auto',
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-word',
-                        }}
-                      >
-                        {segments.before}
-                        <Box
-                          component="span"
-                          sx={{
-                            bgcolor: alpha(theme.palette.success.main, 0.32),
-                            color: 'success.light',
-                            borderRadius: 0.5,
-                          }}
-                        >
-                          {segments.inserted}
-                        </Box>
-                        {segments.after}
-                      </Box>
-                      {entry.event.truncated ? (
-                        <Typography variant="caption" color="text.secondary">
-                          Показаны первые {entry.event.content.length} символов
-                          из {entry.event.contentLength}.
+                      {entry.kind === 'paste' && segments ? (
+                        <>
+                          <Typography variant="caption" color="text.secondary">
+                            {entry.event.path}:{entry.event.line}:
+                            {entry.event.col} · файл после вставки
+                          </Typography>
+                          <Box
+                            component="pre"
+                            sx={{
+                              m: 0,
+                              p: 1.5,
+                              borderRadius: 1.5,
+                              bgcolor: alpha(
+                                theme.palette.common.black,
+                                0.28,
+                              ),
+                              color: 'text.primary',
+                              fontFamily:
+                                'ui-monospace, SFMono-Regular, Consolas, monospace',
+                              fontSize: '0.8rem',
+                              lineHeight: 1.55,
+                              maxHeight: 360,
+                              overflow: 'auto',
+                              whiteSpace: 'pre-wrap',
+                              wordBreak: 'break-word',
+                            }}
+                          >
+                            {segments.before}
+                            <Box
+                              component="span"
+                              sx={{
+                                bgcolor: alpha(
+                                  theme.palette.success.main,
+                                  0.32,
+                                ),
+                                color: 'success.light',
+                                borderRadius: 0.5,
+                              }}
+                            >
+                              {segments.inserted}
+                            </Box>
+                            {segments.after}
+                          </Box>
+                          {entry.event.truncated ? (
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              Показаны первые {entry.event.content.length}{' '}
+                              символов из {entry.event.contentLength}.
+                            </Typography>
+                          ) : null}
+                        </>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          Пользователь вывел курсор за пределы страницы
+                          собеседования.
                         </Typography>
-                      ) : null}
+                      )}
                     </Stack>
                   </Paper>
                 )

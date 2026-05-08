@@ -45,6 +45,14 @@ export type CollabPasteEventDoc = {
   createdAt: Date;
 };
 
+/** Cursor left the interview page viewport during a room session. */
+export type CollabPageLeaveEventDoc = {
+  roomId: string;
+  clientId: string;
+  displayName: string;
+  createdAt: Date;
+};
+
 /** Room metadata (created on first activity). */
 export type CollabRoomDoc = {
   _id: string;

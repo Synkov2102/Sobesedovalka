@@ -343,6 +343,30 @@ export class CollabGateway implements OnGatewayDisconnect {
       .catch((e: unknown) => this.logger.warn(String(e)));
   }
 
+  @SubscribeMessage('collab-page-leave')
+  handlePageLeave(
+    @MessageBody()
+    body: {
+      room?: string;
+      clientId?: string;
+    },
+  ): void {
+    const room = typeof body?.room === 'string' ? body.room : '';
+    const clientId = typeof body?.clientId === 'string' ? body.clientId : '';
+    if (!room || !clientId) {
+      return;
+    }
+
+    const peer = this.roomPeers.get(room)?.get(clientId);
+    void this.mongoRepo
+      .insertPageLeaveEvent({
+        roomId: room,
+        clientId,
+        displayName: peer?.displayName ?? clientId,
+      })
+      .catch((e: unknown) => this.logger.warn(String(e)));
+  }
+
   @SubscribeMessage('collab-file')
   handleFile(
     @MessageBody()

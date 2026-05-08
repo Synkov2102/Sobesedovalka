@@ -28,6 +28,12 @@ export type CollabPasteEventDto = {
   createdAt: string;
 };
 
+export type CollabPageLeaveEventDto = {
+  clientId: string;
+  displayName: string;
+  createdAt: string;
+};
+
 @Injectable()
 export class CollabRoomsService {
   constructor(private readonly collabRepo: CollabMongoRepository) {}
@@ -93,6 +99,22 @@ export class CollabRoomsService {
       insertEndOffset: event.insertEndOffset ?? event.content.length,
       line: event.line,
       col: event.col,
+      createdAt: event.createdAt.toISOString(),
+    }));
+  }
+
+  async listPageLeaveEventsMine(
+    roomId: string,
+    userId: string,
+  ): Promise<CollabPageLeaveEventDto[] | 'forbidden'> {
+    const canRead = await this.collabRepo.roomBelongsToOwner(roomId, userId);
+    if (!canRead) {
+      return 'forbidden';
+    }
+    const docs = await this.collabRepo.listPageLeaveEvents(roomId);
+    return docs.map((event) => ({
+      clientId: event.clientId,
+      displayName: event.displayName,
       createdAt: event.createdAt.toISOString(),
     }));
   }

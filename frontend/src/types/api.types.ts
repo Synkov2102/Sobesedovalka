@@ -37,6 +37,12 @@ export type CollabPasteEvent = {
   createdAt: string
 }
 
+export type CollabPageLeaveEvent = {
+  clientId: string
+  displayName: string
+  createdAt: string
+}
+
 export type AuthUser = {
   id: string
   email?: string
