@@ -19,7 +19,6 @@ import type {
   ExplorerFolderNode,
 } from './types/playgroundFileExplorer.types'
 import { writeToClipboard } from './utils/clipboard'
-import { defaultComponentSource } from './utils/source'
 import { buildExplorerTree } from './utils/tree'
 import { buildPeersByActiveFile } from './utils/peers'
 import {
@@ -120,7 +119,7 @@ export function PlaygroundFileExplorer({
         mode: 'create',
         kind,
         parentPath,
-        value: kind === 'file' ? 'NewFile.tsx' : 'New Folder',
+        value: kind === 'file' ? 'NewFile.tsx' : 'NewFolder',
       })
     },
     [],
@@ -204,7 +203,7 @@ export function PlaygroundFileExplorer({
         return
       }
 
-      const content = defaultComponentSource(filePath)
+      const content = ''
       saveFile(filePath, content)
       sandpack.addFile(filePath, content, true)
       sandpack.openFile(filePath)
