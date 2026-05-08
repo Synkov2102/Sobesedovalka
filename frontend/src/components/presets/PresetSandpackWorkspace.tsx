@@ -8,10 +8,7 @@ import {
 import { useTheme } from '@mui/material/styles'
 import { forwardRef, useImperativeHandle, useMemo } from 'react'
 import { normalizeSandpackFilePath } from '../../collab/sandpackPaths'
-import {
-  DEFAULT_SANDBOX_APP,
-  DEFAULT_SANDBOX_STYLES,
-} from '../../sandbox/defaultFiles'
+import { DEFAULT_SANDBOX_FILES } from '../../sandbox/defaultFiles'
 import type { TaskPresetFile } from '../../types/api.types'
 import { LocalSandpackFsProvider } from '../LocalSandpackFsProvider'
 import { PlaygroundFileExplorer } from '../PlaygroundFileExplorer'
@@ -60,10 +57,12 @@ export type PresetSandpackWorkspaceProps = {
 }
 
 function defaultSandpackFiles(): Record<string, { code: string }> {
-  return {
-    '/App.tsx': { code: DEFAULT_SANDBOX_APP },
-    '/styles.css': { code: DEFAULT_SANDBOX_STYLES },
-  }
+  return Object.fromEntries(
+    Object.entries(DEFAULT_SANDBOX_FILES).map(([path, code]) => [
+      path,
+      { code },
+    ]),
+  )
 }
 
 function sandpackFilesFromPresetRecord(

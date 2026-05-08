@@ -12,10 +12,7 @@ import { CollabSync } from './CollabSync'
 import { PeerCaretsOverlay } from './PeerCaretsOverlay'
 import { PlaygroundCollabBar } from './PlaygroundCollabBar'
 import { PlaygroundFileExplorer } from './PlaygroundFileExplorer'
-import {
-  DEFAULT_SANDBOX_APP,
-  DEFAULT_SANDBOX_STYLES,
-} from '../sandbox/defaultFiles'
+import { DEFAULT_SANDBOX_FILES } from '../sandbox/defaultFiles'
 import { v4 as uuidv4 } from 'uuid'
 import {
   typescriptAdditionalLanguages,
@@ -126,10 +123,13 @@ export function Playground({ onInvalidExplicitRoom }: PlaygroundProps) {
 
   /** Stable refs — Sandpack resets all file state whenever `files` identity changes. */
   const sandpackFiles = useMemo(
-    () => ({
-      '/App.tsx': { code: DEFAULT_SANDBOX_APP },
-      '/styles.css': { code: DEFAULT_SANDBOX_STYLES },
-    }),
+    () =>
+      Object.fromEntries(
+        Object.entries(DEFAULT_SANDBOX_FILES).map(([path, code]) => [
+          path,
+          { code },
+        ]),
+      ),
     [],
   )
   const sandpackOptions = useMemo(
