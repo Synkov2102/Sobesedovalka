@@ -14,7 +14,6 @@ import {
   SandpackPreview,
   useSandpack,
 } from '@codesandbox/sandpack-react'
-import { EditorView } from '@codemirror/view'
 import { fetchCollabRoomReady } from '../api/taskPresets'
 import type { CollabPeerDTO } from '../collab/collab.types'
 import { CollabSync } from './CollabSync'
@@ -22,8 +21,12 @@ import { PeerCaretsOverlay } from './PeerCaretsOverlay'
 import { PlaygroundCollabBar } from './PlaygroundCollabBar'
 import { PlaygroundFileExplorer } from './PlaygroundFileExplorer'
 import { useCollabPaste } from './collabPasteContext'
-import { DEFAULT_SANDBOX_FILES } from '../sandbox/defaultFiles'
+import { SANDPACK_BOOTSTRAP_FILES } from '../sandbox/defaultFiles'
 import { v4 as uuidv4 } from 'uuid'
+import {
+  setCodeEditorPasteHandler,
+  codeEditorPasteExtension,
+} from './codeEditorPasteExtension'
 import {
   typescriptAdditionalLanguages,
   typescriptCodeEditorExtensions,
@@ -90,36 +93,36 @@ function PasteTrackingCodeEditor() {
     recordPasteRef.current = paste?.recordPaste
   }, [paste?.recordPaste, sandpack.activeFile])
 
-  const editorExtensions = useMemo(
-    () => [
-      ...typescriptCodeEditorExtensions,
-      EditorView.domEventHandlers({
-        paste(event, view) {
-          const content = event.clipboardData?.getData('text/plain') ?? ''
-          const recordPaste = recordPasteRef.current
-          const path = activeFileRef.current
-          if (!content || !recordPaste || !path) {
-            return
-          }
+  useLayoutEffect(() => {
+    setCodeEditorPasteHandler((event, view) => {
+      const content = event.clipboardData?.getData('text/plain') ?? ''
+      const recordPaste = recordPasteRef.current
+      const path = activeFileRef.current
+      if (!content || !recordPaste || !path) {
+        return
+      }
 
-          const selection = view.state.selection.main
-          const insertStartOffset = selection.from
-          const insertEndOffset = insertStartOffset + content.length
-          const line = view.state.doc.lineAt(insertStartOffset)
-          const before = view.state.doc.sliceString(0, selection.from)
-          const after = view.state.doc.sliceString(selection.to)
-          recordPaste({
-            path,
-            content,
-            fileContent: `${before}${content}${after}`,
-            insertStartOffset,
-            insertEndOffset,
-            line: line.number,
-            col: insertStartOffset - line.from + 1,
-          })
-        },
-      }),
-    ],
+      const selection = view.state.selection.main
+      const insertStartOffset = selection.from
+      const insertEndOffset = insertStartOffset + content.length
+      const line = view.state.doc.lineAt(insertStartOffset)
+      const before = view.state.doc.sliceString(0, selection.from)
+      const after = view.state.doc.sliceString(selection.to)
+      recordPaste({
+        path,
+        content,
+        fileContent: `${before}${content}${after}`,
+        insertStartOffset,
+        insertEndOffset,
+        line: line.number,
+        col: insertStartOffset - line.from + 1,
+      })
+    })
+    return () => setCodeEditorPasteHandler(null)
+  })
+
+  const editorExtensions = useMemo(
+    () => [...typescriptCodeEditorExtensions, codeEditorPasteExtension],
     [],
   )
 
@@ -190,7 +193,7 @@ export function Playground({ onInvalidExplicitRoom }: PlaygroundProps) {
   const sandpackFiles = useMemo(
     () =>
       Object.fromEntries(
-        Object.entries(DEFAULT_SANDBOX_FILES).map(([path, code]) => [
+        Object.entries(SANDPACK_BOOTSTRAP_FILES).map(([path, code]) => [
           path,
           { code },
         ]),
@@ -202,8 +205,8 @@ export function Playground({ onInvalidExplicitRoom }: PlaygroundProps) {
       autorun: true,
       autoReload: true,
       recompileMode: 'immediate' as const,
-      /** Иначе превью может собраться по шаблону до прихода collab-snapshot. */
-      initMode: 'immediate' as const,
+      /** Старт после collab-snapshot — иначе гонка с перезапуском и чёрный экран. */
+      initMode: 'lazy' as const,
     }),
     [],
   )

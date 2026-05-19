@@ -1,4 +1,5 @@
 import {
+  startTransition,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -9,10 +10,7 @@ import {
 } from 'react'
 import { useSandpack } from '@codesandbox/sandpack-react'
 import { normalizeSandpackFilePath } from '../collab/sandpackPaths'
-import {
-  CollabFsContext,
-  type CollabFsContextValue,
-} from './collabFsContext'
+import { CollabFsContext, type CollabFsContextValue } from './collabFsContext'
 import {
   getFoldersForFile,
   normalizeNewFolderPath,
@@ -107,9 +105,11 @@ export function LocalSandpackFsProvider({
     const folders = normalizeFolderList(sorted, [])
     filePathsRef.current = sorted
     folderPathsRef.current = folders
-    setFilePaths(sorted)
-    setFolderPaths(folders)
-    setSnapshotReady(true)
+    startTransition(() => {
+      setFilePaths(sorted)
+      setFolderPaths(folders)
+      setSnapshotReady(true)
+    })
   }, [sandpack.status, sandpack.files])
 
   const syncFolders = useCallback(
@@ -122,7 +122,8 @@ export function LocalSandpackFsProvider({
     [],
   )
 
-  const saveFile = useCallback((path: string, _content: string) => {
+  const saveFile = useCallback((path: string, content: string) => {
+    void content
     const normalizedPath = normalizeSandpackFilePath(path)
     if (!normalizedPath) {
       return

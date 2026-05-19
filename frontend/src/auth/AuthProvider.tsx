@@ -1,7 +1,5 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useState,
@@ -9,28 +7,12 @@ import {
 } from 'react'
 import { fetchMe, postAuthLogin, postAuthRegister } from '../api/auth'
 import type { AuthUser } from '../types/api.types'
+import { AuthContext, type AuthContextValue } from './auth-state'
 import {
   clearAccessToken,
   getAccessToken,
   setAccessToken,
 } from './tokenStorage'
-
-type AuthContextValue = {
-  user: AuthUser | null
-  /** True after initial check of stored token. */
-  ready: boolean
-  login: (login: string, password: string) => Promise<void>
-  register: (params: {
-    email: string
-    phone: string
-    password: string
-  }) => Promise<void>
-  logout: () => void
-  authError: string | null
-  clearAuthError: () => void
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
@@ -131,12 +113,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
-
-export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext)
-  if (!ctx) {
-    throw new Error('useAuth must be used within AuthProvider')
-  }
-  return ctx
 }

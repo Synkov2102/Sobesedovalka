@@ -9,11 +9,11 @@ export default function App() {
     <main className="sandbox-main">
       <h1>React + Vite (TypeScript)</h1>
       <p>
-        Create folders and <code>.tsx</code> files in the file explorer, then add an
-        import at the top of this file and render your component below.
+        Создавайте папки и файлы <code>.tsx</code> в проводнике, затем добавьте
+        импорт в начало этого файла и отрисуйте компонент ниже.
       </p>
       <button type="button" onClick={() => setN((c) => c + 1)}>
-        Clicks: \${n}
+        Клики: {n}
       </button>
     </main>
   );
@@ -123,7 +123,8 @@ root.render(
     "jsx": "react-jsx"
   },
   "include": [
-    "src"
+    "**/*.ts",
+    "**/*.tsx"
   ],
   "references": [
     {
@@ -154,6 +155,6 @@ export default defineConfig({
   plugins: [react()],
 })
 `,
-}
+};
 
-export const DEFAULT_SANDBOX_FOLDERS: string[] = []
+export const DEFAULT_SANDBOX_FOLDERS: string[] = [];

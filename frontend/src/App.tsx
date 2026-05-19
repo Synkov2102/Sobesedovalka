@@ -15,7 +15,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@mui/material'
-import { useAuth } from './auth/AuthContext'
+import { useAuth } from './auth/useAuth'
 import { AuthScreen } from './auth/AuthScreen'
 import { AppBrandWordmark } from './components/AppBrandWordmark'
 import { RoomsPanel } from './components/RoomsPanel'
@@ -98,38 +98,37 @@ type AppMainProps = {
 }
 
 function AppMain({ user, logout }: AppMainProps) {
-  const [mainTab, setMainTab] = useState<MainTab>(readMainTabFromUrl)
-  const [navRevision, setNavRevision] = useState(0)
+  const [navRevision, setNavRevision] = useState(() => {
+    migratePresetFocusToCreateUrl()
+    normalizeLegacyUrlTabs()
+    return 0
+  })
 
   const bumpNav = useCallback(() => {
     setNavRevision((n) => n + 1)
   }, [])
 
   useEffect(() => {
-    migratePresetFocusToCreateUrl()
-    normalizeLegacyUrlTabs()
-    setMainTab(readMainTabFromUrl())
-    bumpNav()
-  }, [bumpNav])
-
-  useEffect(() => {
-    const onPop = () => {
-      setMainTab(readMainTabFromUrl())
-      bumpNav()
-    }
+    const onPop = () => bumpNav()
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [bumpNav])
 
-  const roomId = useMemo(
-    () => readRoomIdFromSearch(window.location.search),
-    [navRevision],
-  )
+  const mainTab = useMemo(() => {
+    void navRevision
+    return readMainTabFromUrl()
+  }, [navRevision])
+
+  const roomId = useMemo(() => {
+    void navRevision
+    return readRoomIdFromSearch(window.location.search)
+  }, [navRevision])
   const isSandbox = Boolean(roomId)
   const presetEditorRoute = useMemo(() => {
     if (mainTab !== 'presets') {
       return 'list' as const
     }
+    void navRevision
     return parsePresetEditorRoute(window.location.search)
   }, [mainTab, navRevision])
   const isPresetEditor = mainTab === 'presets' && presetEditorRoute !== 'list'
@@ -144,7 +143,6 @@ function AppMain({ user, logout }: AppMainProps) {
       url.searchParams.delete('room')
       url.searchParams.delete('preset')
       window.history.pushState({}, '', url.pathname + url.search)
-      setMainTab(next)
       bumpNav()
     },
     [bumpNav],
@@ -167,13 +165,11 @@ function AppMain({ user, logout }: AppMainProps) {
     url.searchParams.set('tab', 'rooms')
     url.searchParams.delete('preset')
     window.history.pushState({}, '', url.pathname + url.search)
-    setMainTab('rooms')
     bumpNav()
   }, [bumpNav])
 
   const onInvalidRoom = useCallback(() => {
     replaceUrlForInvalidRoom()
-    setMainTab('rooms')
     bumpNav()
   }, [bumpNav])
 
@@ -183,7 +179,6 @@ function AppMain({ user, logout }: AppMainProps) {
     url.searchParams.set('preset', 'new')
     url.searchParams.delete('room')
     window.history.pushState({}, '', url.pathname + url.search)
-    setMainTab('presets')
     bumpNav()
   }, [bumpNav])
 
@@ -194,7 +189,6 @@ function AppMain({ user, logout }: AppMainProps) {
       url.searchParams.set('preset', presetId)
       url.searchParams.delete('room')
       window.history.pushState({}, '', url.pathname + url.search)
-      setMainTab('presets')
       bumpNav()
     },
     [bumpNav],
@@ -206,7 +200,6 @@ function AppMain({ user, logout }: AppMainProps) {
     url.searchParams.delete('preset')
     url.searchParams.delete('room')
     window.history.pushState({}, '', url.pathname + url.search)
-    setMainTab('presets')
     bumpNav()
   }, [bumpNav])
 
@@ -362,7 +355,9 @@ function AppMain({ user, logout }: AppMainProps) {
           >
             <Suspense
               fallback={
-                <Typography color="text.secondary">Загрузка редактора…</Typography>
+                <Typography color="text.secondary">
+                  Загрузка редактора…
+                </Typography>
               }
             >
               <Playground

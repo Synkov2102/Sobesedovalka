@@ -97,8 +97,7 @@ function buildRoomHistoryEntries(
   }))
 
   return [...pasteEntries, ...pageLeaveEntries].sort(
-    (a, b) =>
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   )
 }
 
@@ -835,10 +834,7 @@ export function RoomsPanel({ onOpenRoom }: RoomsPanelProps) {
                               m: 0,
                               p: 1.5,
                               borderRadius: 1.5,
-                              bgcolor: alpha(
-                                theme.palette.common.black,
-                                0.28,
-                              ),
+                              bgcolor: alpha(theme.palette.common.black, 0.28),
                               color: 'text.primary',
                               fontFamily:
                                 'ui-monospace, SFMono-Regular, Consolas, monospace',

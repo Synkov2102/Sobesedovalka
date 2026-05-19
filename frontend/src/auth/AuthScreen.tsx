@@ -10,7 +10,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@mui/material'
-import { useAuth } from './AuthContext'
+import { useAuth } from './useAuth'
 import { appShellPageSx, sectionSurfacePaddingSx } from '../theme/layout'
 import { AppBrandWordmark } from '../components/AppBrandWordmark'
 

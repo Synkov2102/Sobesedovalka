@@ -14,8 +14,9 @@ export type CollabPasteContextValue = {
   recordPaste: (event: CollabPasteEventInput) => void
 }
 
-export const CollabPasteContext =
-  createContext<CollabPasteContextValue | null>(null)
+export const CollabPasteContext = createContext<CollabPasteContextValue | null>(
+  null,
+)
 
 export function useCollabPaste(): CollabPasteContextValue | null {
   return useContext(CollabPasteContext)

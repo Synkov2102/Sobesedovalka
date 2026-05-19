@@ -14,7 +14,9 @@ export class JwtAuthGuard implements CanActivate {
   constructor(private readonly jwt: JwtService) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const req = context.switchToHttp().getRequest<Request & { user?: RequestUser }>();
+    const req = context
+      .switchToHttp()
+      .getRequest<Request & { user?: RequestUser }>();
     const token = this.extractBearer(req.headers.authorization);
     if (!token) {
       throw new UnauthorizedException();

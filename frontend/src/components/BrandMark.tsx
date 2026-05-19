@@ -1,4 +1,5 @@
 import Box, { type BoxProps } from '@mui/material/Box'
+import type { SxProps, Theme } from '@mui/material/styles'
 
 export type BrandMarkProps = {
   /** Базовый размер, если не задан через `sx`. */
@@ -16,20 +17,16 @@ export function BrandMark({
   sx,
 }: BrandMarkProps) {
   const alt = titleAccess ?? ''
+  const baseSx: SxProps<Theme> = {
+    lineHeight: 0,
+    flexShrink: 0,
+    display: 'block',
+    width: size,
+    height: size,
+  }
 
   return (
-    <Box
-      sx={[
-        {
-          lineHeight: 0,
-          flexShrink: 0,
-          display: 'block',
-          width: size,
-          height: size,
-        },
-        ...(sx ? (Array.isArray(sx) ? sx : [sx]) : []),
-      ]}
-    >
+    <Box sx={sx == null ? baseSx : ([baseSx, sx] as SxProps<Theme>)}>
       <Box
         component="img"
         src="/logo.svg"

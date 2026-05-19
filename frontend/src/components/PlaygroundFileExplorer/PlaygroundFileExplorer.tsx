@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { MouseEvent } from 'react'
 import { useSandpack } from '@codesandbox/sandpack-react'
 import { useCollabFs } from '../collabFsContext'
@@ -8,7 +8,6 @@ import { VITE_REACT_TS_PROTECTED } from './constants/playgroundFileExplorer.cons
 import { useClearDropTargetWhenNoDrag } from './hooks/useDragDropUiSync'
 import { useCopiedPathReset } from './hooks/useCopiedPathReset'
 import { useContextMenuDismiss } from './hooks/useContextMenuDismiss'
-import { useDraftInputFocus } from './hooks/useDraftInputFocus'
 import { useExplorerFsOps } from './hooks/useExplorerFsOps'
 import type {
   ContextMenuState,
@@ -34,7 +33,7 @@ import {
 } from './utils/paths'
 import { sortUniqueFolderPaths } from './utils/sort'
 import './PlaygroundFileExplorer.css'
-import { renderDraftRow as renderDraftRowUi } from './ui/renderDraftRow'
+import { ExplorerDraftRow } from './ui/ExplorerDraftRow'
 import { renderFile as renderFileUi } from './ui/renderFile'
 import { renderFolder as renderFolderUi } from './ui/renderFolder'
 import { PlaygroundContextMenu } from './ui/PlaygroundContextMenu'
@@ -54,8 +53,6 @@ export function PlaygroundFileExplorer({
     saveFile,
     removeFile,
   } = useCollabFs()
-  const editorInputRef = useRef<HTMLInputElement | null>(null)
-  const draftSelectKeyRef = useRef<string | null>(null)
   const [collapsedFolders, setCollapsedFolders] = useState<string[]>([])
   const [draft, setDraft] = useState<ExplorerDraft | null>(null)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
@@ -291,7 +288,6 @@ export function PlaygroundFileExplorer({
     [openContextMenu],
   )
 
-  useDraftInputFocus(draft, editorInputRef, draftSelectKeyRef)
   useContextMenuDismiss(!!contextMenu, closeContextMenu)
   useClearDropTargetWhenNoDrag(dragItem, setDropTargetPath)
   useCopiedPathReset(copiedPath, setCopiedPath)
@@ -419,15 +415,17 @@ export function PlaygroundFileExplorer({
         return null
       }
 
-      return renderDraftRowUi({
-        depth,
-        draft,
-        editorInputRef,
-        setDraft,
-        commitDraft,
-        cancelDraft,
-        FileTypeIcon,
-      })
+      return (
+        <ExplorerDraftRow
+          key={`draft-${draft.mode}-${draft.kind}-${draft.mode === 'rename' ? draft.path : draft.parentPath}`}
+          depth={depth}
+          draft={draft}
+          setDraft={setDraft}
+          commitDraft={commitDraft}
+          cancelDraft={cancelDraft}
+          FileTypeIcon={FileTypeIcon}
+        />
+      )
     },
     [cancelDraft, commitDraft, draft],
   )

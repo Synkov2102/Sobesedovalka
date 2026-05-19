@@ -16,6 +16,10 @@ import {
   syncPeerPresenceColors,
 } from './collab-color';
 import { normalizeSandpackFilePath } from './sandpack-paths';
+import {
+  mergeWithDefaultSandboxFiles,
+  sandboxFilesNeedPersist,
+} from './sandbox-files';
 import { randomDisplayName } from './collab-names';
 import { corsCredentialsFromEnv, corsOriginFromEnv } from '../cors-env';
 import { UsersRepository } from '../auth/users.repository';
@@ -376,7 +380,6 @@ export class CollabGateway implements OnGatewayDisconnect {
       content?: string;
       from?: string;
     },
-    @ConnectedSocket() client: Socket,
   ): void {
     const room = typeof body?.room === 'string' ? body.room : '';
     const path =
@@ -409,8 +412,11 @@ export class CollabGateway implements OnGatewayDisconnect {
   @SubscribeMessage('collab-remove')
   handleRemove(
     @MessageBody()
-    body: { room?: string; path?: string; from?: string },
-    @ConnectedSocket() client: Socket,
+    body: {
+      room?: string;
+      path?: string;
+      from?: string;
+    },
   ): void {
     const room = typeof body?.room === 'string' ? body.room : '';
     const path =
@@ -434,7 +440,9 @@ export class CollabGateway implements OnGatewayDisconnect {
     void this.mongoRepo
       .deleteFile(room, path)
       .catch((e: unknown) => this.logger.warn(String(e)));
-    this.server.to(room).emit('collab-remove', { path, from, rev: nextRevision });
+    this.server
+      .to(room)
+      .emit('collab-remove', { path, from, rev: nextRevision });
   }
 
   @SubscribeMessage('collab-folders-sync')
@@ -515,7 +523,10 @@ export class CollabGateway implements OnGatewayDisconnect {
     );
   }
 
-  private collectRoomHueSet(room: string, excludeClientId?: string): Set<number> {
+  private collectRoomHueSet(
+    room: string,
+    excludeClientId?: string,
+  ): Set<number> {
     const used = new Set<number>();
     const map = this.roomPeers.get(room);
     if (!map) {
@@ -554,8 +565,7 @@ export class CollabGateway implements OnGatewayDisconnect {
     }
     try {
       const payload = await this.jwt.verifyAsync<{ sub?: string }>(token);
-      const sub =
-        typeof payload?.sub === 'string' ? payload.sub.trim() : '';
+      const sub = typeof payload?.sub === 'string' ? payload.sub.trim() : '';
       if (!sub) {
         return null;
       }
@@ -574,14 +584,21 @@ export class CollabGateway implements OnGatewayDisconnect {
     }
     await this.mongoRepo.ensureRoom(room);
     const loaded = await this.mongoRepo.loadFiles(room);
-    this.roomFiles.set(room, new Map(Object.entries(loaded)));
+    const merged = mergeWithDefaultSandboxFiles(loaded);
+    this.roomFiles.set(room, new Map(Object.entries(merged)));
+    if (sandboxFilesNeedPersist(loaded, merged)) {
+      void this.mongoRepo.replaceRoomFiles(room, merged);
+    }
     this.roomFileRevisions.set(
       room,
       new Map(
-        Object.keys(loaded).map((path) => [normalizeSandpackFilePath(path), 1]),
+        Object.keys(merged).map((path) => [normalizeSandpackFilePath(path), 1]),
       ),
     );
     const loadedFolders = await this.mongoRepo.loadFolders(room);
-    this.roomFolders.set(room, new Set(deriveFolderPaths(loaded, loadedFolders)));
+    this.roomFolders.set(
+      room,
+      new Set(deriveFolderPaths(merged, loadedFolders)),
+    );
   }
 }

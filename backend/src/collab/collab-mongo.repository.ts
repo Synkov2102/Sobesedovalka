@@ -68,7 +68,10 @@ export class CollabMongoRepository implements OnModuleInit {
     await this.folders().createIndex({ roomId: 1, path: 1 }, { unique: true });
     await this.pasteEvents().createIndex({ roomId: 1, createdAt: -1 });
     await this.pageLeaveEvents().createIndex({ roomId: 1, createdAt: -1 });
-    await this.peers().createIndex({ roomId: 1, clientId: 1 }, { unique: true });
+    await this.peers().createIndex(
+      { roomId: 1, clientId: 1 },
+      { unique: true },
+    );
     await this.rooms().createIndex({ updatedAt: -1 });
     await this.rooms().createIndex({ ownerUserId: 1, updatedAt: -1 });
   }
@@ -96,7 +99,10 @@ export class CollabMongoRepository implements OnModuleInit {
 
   /** True if this room was seeded with at least one Sandpack file (preset start-room). */
   async roomHasFiles(roomId: string): Promise<boolean> {
-    const doc = await this.files().findOne({ roomId }, { projection: { _id: 1 } });
+    const doc = await this.files().findOne(
+      { roomId },
+      { projection: { _id: 1 } },
+    );
     return doc !== null;
   }
 

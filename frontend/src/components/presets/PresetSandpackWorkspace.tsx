@@ -8,7 +8,12 @@ import {
 import { useTheme } from '@mui/material/styles'
 import { forwardRef, useImperativeHandle, useMemo } from 'react'
 import { normalizeSandpackFilePath } from '../../collab/sandpackPaths'
-import { DEFAULT_SANDBOX_FILES } from '../../sandbox/defaultFiles'
+import {
+  DEFAULT_SANDBOX_FILES,
+  SANDPACK_BOOTSTRAP_FILES,
+  filesForSandpackSync,
+  sanitizeKnownSandboxFileContent,
+} from '../../sandbox/defaultFiles'
 import type { TaskPresetFile } from '../../types/api.types'
 import { LocalSandpackFsProvider } from '../LocalSandpackFsProvider'
 import { PlaygroundFileExplorer } from '../PlaygroundFileExplorer'
@@ -58,7 +63,7 @@ export type PresetSandpackWorkspaceProps = {
 
 function defaultSandpackFiles(): Record<string, { code: string }> {
   return Object.fromEntries(
-    Object.entries(DEFAULT_SANDBOX_FILES).map(([path, code]) => [
+    Object.entries(SANDPACK_BOOTSTRAP_FILES).map(([path, code]) => [
       path,
       { code },
     ]),
@@ -71,15 +76,20 @@ function sandpackFilesFromPresetRecord(
   if (!initialFiles || Object.keys(initialFiles).length === 0) {
     return defaultSandpackFiles()
   }
-  const out: Record<string, { code: string }> = {}
+  const merged: Record<string, string> = { ...DEFAULT_SANDBOX_FILES }
   for (const [path, content] of Object.entries(initialFiles)) {
     const normalized = normalizeSandpackFilePath(path)
     if (!normalized || SKIP_PRESET_EXPORT_PATHS.has(normalized)) {
       continue
     }
-    out[normalized] = { code: content }
+    merged[normalized] = sanitizeKnownSandboxFileContent(normalized, content)
   }
-  return Object.keys(out).length > 0 ? out : defaultSandpackFiles()
+  return Object.fromEntries(
+    Object.entries(filesForSandpackSync(merged)).map(([path, code]) => [
+      path,
+      { code },
+    ]),
+  )
 }
 
 const PresetSandpackBindings = forwardRef<PresetSandpackWorkspaceHandle>(

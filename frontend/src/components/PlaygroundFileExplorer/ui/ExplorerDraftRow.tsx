@@ -1,23 +1,33 @@
-import type { Dispatch, ReactNode, RefObject, SetStateAction } from 'react'
+import {
+  useRef,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from 'react'
+import { useDraftInputFocus } from '../hooks/useDraftInputFocus'
 import type { ExplorerDraft } from '../types/playgroundFileExplorer.types'
 
-export function renderDraftRow({
-  depth,
-  draft,
-  editorInputRef,
-  setDraft,
-  commitDraft,
-  cancelDraft,
-  FileTypeIcon,
-}: {
+type ExplorerDraftRowProps = {
   depth: number
   draft: ExplorerDraft
-  editorInputRef: RefObject<HTMLInputElement | null>
   setDraft: Dispatch<SetStateAction<ExplorerDraft | null>>
   commitDraft: () => void
   cancelDraft: () => void
   FileTypeIcon: (props: { filePath: string }) => ReactNode
-}) {
+}
+
+export function ExplorerDraftRow({
+  depth,
+  draft,
+  setDraft,
+  commitDraft,
+  cancelDraft,
+  FileTypeIcon,
+}: ExplorerDraftRowProps) {
+  const editorInputRef = useRef<HTMLInputElement | null>(null)
+  const draftSelectKeyRef = useRef<string | null>(null)
+  useDraftInputFocus(draft, editorInputRef, draftSelectKeyRef)
+
   function handleDraftValueChange(e: React.ChangeEvent<HTMLInputElement>) {
     setDraft((prev) => (prev ? { ...prev, value: e.target.value } : prev))
   }

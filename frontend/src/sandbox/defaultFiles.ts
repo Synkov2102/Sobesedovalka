@@ -11,7 +11,7 @@ export default function App() {
         импорт в начало этого файла и отрисуйте компонент ниже.
       </p>
       <button type="button" onClick={() => setN((c) => c + 1)}>
-        Клики: \${n}
+        Клики: {n}
       </button>
     </main>
   );
@@ -126,7 +126,8 @@ export const DEFAULT_SANDBOX_TSCONFIG = `{
     "jsx": "react-jsx"
   },
   "include": [
-    "src"
+    "**/*.ts",
+    "**/*.tsx"
   ],
   "references": [
     {
@@ -161,6 +162,17 @@ export default defineConfig({
 })
 `
 
+/** Починка старых комнат: в шаблоне ошибочно экранировали `\${n}` → в файле оказалось `${n}`. */
+export function sanitizeKnownSandboxFileContent(
+  path: string,
+  content: string,
+): string {
+  if (path !== '/App.tsx') {
+    return content
+  }
+  return content.replace(/(Клики|Clicks):\s*\$\{n\}/g, '$1: {n}')
+}
+
 export const DEFAULT_SANDBOX_FILES: Record<string, string> = {
   '/App.tsx': DEFAULT_SANDBOX_APP,
   '/index.html': DEFAULT_SANDBOX_INDEX_HTML,
@@ -171,4 +183,30 @@ export const DEFAULT_SANDBOX_FILES: Record<string, string> = {
   '/tsconfig.node.json': DEFAULT_SANDBOX_TSCONFIG_NODE,
   '/vite-env.d.ts': DEFAULT_SANDBOX_VITE_ENV,
   '/vite.config.ts': DEFAULT_SANDBOX_VITE_CONFIG,
+}
+
+/** Только переопределения для Sandpack — остальное даёт template `vite-react-ts`. */
+export const SANDPACK_BOOTSTRAP_FILES: Record<string, string> = {
+  '/App.tsx': DEFAULT_SANDBOX_APP,
+  '/styles.css': DEFAULT_SANDBOX_STYLES,
+}
+
+/** Vite-инфраструктуру даёт template `vite-react-ts`; в Sandpack не перезаписываем из Mongo. */
+export const SANDPACK_INFRA_PATHS = new Set(
+  Object.keys(DEFAULT_SANDBOX_FILES).filter(
+    (path) => path !== '/App.tsx' && path !== '/styles.css',
+  ),
+)
+
+export function filesForSandpackSync(
+  merged: Record<string, string>,
+): Record<string, string> {
+  const out: Record<string, string> = { ...SANDPACK_BOOTSTRAP_FILES }
+  for (const [path, content] of Object.entries(merged)) {
+    if (SANDPACK_INFRA_PATHS.has(path)) {
+      continue
+    }
+    out[path] = sanitizeKnownSandboxFileContent(path, content)
+  }
+  return out
 }

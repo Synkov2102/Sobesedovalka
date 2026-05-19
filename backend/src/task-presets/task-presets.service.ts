@@ -110,7 +110,10 @@ export class TaskPresetsService {
   }
 
   async collabRoomReady(roomId: string): Promise<{ ready: boolean }> {
-    const safe = roomId.trim().replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+    const safe = roomId
+      .trim()
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .slice(0, 64);
     if (!safe) {
       return { ready: false };
     }
@@ -118,10 +121,7 @@ export class TaskPresetsService {
     return { ready };
   }
 
-  async startRoom(
-    userId: string,
-    id: string,
-  ): Promise<{ roomId: string }> {
+  async startRoom(userId: string, id: string): Promise<{ roomId: string }> {
     const preset = await this.repo.findByIdForUser(id, userId);
     if (!preset) {
       throw new NotFoundException('Preset not found');
@@ -148,7 +148,9 @@ export class TaskPresetsService {
         throw new BadRequestException('Invalid file path');
       }
       files[path] = entry.content;
-      this.getFoldersForFile(path).forEach((folderPath) => folders.add(folderPath));
+      this.getFoldersForFile(path).forEach((folderPath) =>
+        folders.add(folderPath),
+      );
     }
 
     const paths = Object.keys(files);

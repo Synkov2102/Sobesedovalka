@@ -29,6 +29,11 @@ import {
   getFoldersForFile,
   normalizeNewFolderPath,
 } from './PlaygroundFileExplorer/utils/paths'
+import {
+  DEFAULT_SANDBOX_FILES,
+  filesForSandpackSync,
+  sanitizeKnownSandboxFileContent,
+} from '../sandbox/defaultFiles'
 
 function collabWsUrl(): string {
   const raw = import.meta.env.VITE_COLLAB_WS_URL
@@ -127,17 +132,21 @@ function normalizeFolderList(
 }
 
 function normalizeSnapshotFiles(raw: unknown): Record<string, string> {
+  /** База — полный Vite-шаблон; снапшот комнаты перекрывает только сохранённые файлы. */
+  const out: Record<string, string> = { ...DEFAULT_SANDBOX_FILES }
   if (!raw || typeof raw !== 'object') {
-    return {}
+    return out
   }
 
-  const out: Record<string, string> = {}
   Object.entries(raw as Record<string, unknown>).forEach(([path, content]) => {
     const normalizedPath = normalizeSandpackFilePath(path)
     if (!normalizedPath || typeof content !== 'string') {
       return
     }
-    out[normalizedPath] = content
+    out[normalizedPath] = sanitizeKnownSandboxFileContent(
+      normalizedPath,
+      content,
+    )
   })
   return out
 }
@@ -145,10 +154,14 @@ function normalizeSnapshotFiles(raw: unknown): Record<string, string> {
 function syncSandpackSnapshot(
   sandpack: ReturnType<typeof useSandpack>['sandpack'],
   files: Record<string, string>,
+  previousPaths: string[],
 ) {
+  const merged: Record<string, string> = { ...DEFAULT_SANDBOX_FILES, ...files }
+  const sandpackFiles = filesForSandpackSync(merged)
+  const nextPaths = Object.keys(sandpackFiles)
   let touched = false
 
-  Object.entries(files).forEach(([path, content]) => {
+  Object.entries(sandpackFiles).forEach(([path, content]) => {
     const cur = getFileCode(sandpack.files[path])
     if (cur !== content) {
       sandpack.updateFile(path, content, false)
@@ -156,18 +169,21 @@ function syncSandpackSnapshot(
     }
   })
 
-  const pathsToDelete = Object.keys(sandpack.files)
-    .filter((path) => !(path in files))
+  const pathsToDelete = previousPaths
+    .filter((path) => !nextPaths.includes(path))
+    .filter((path) => sandpack.files[path])
     .sort((a, b) => b.length - a.length)
 
   pathsToDelete.forEach((path) => {
-    sandpack.deleteFile(path, false)
-    touched = true
+    if (sandpack.files[path]) {
+      sandpack.deleteFile(path, false)
+      touched = true
+    }
   })
 
   const nextActive = normalizeSandpackFilePath(sandpack.activeFile ?? '')
-  if (!files[nextActive]) {
-    const firstPath = Object.keys(files).sort((a, b) => a.localeCompare(b))[0]
+  if (!merged[nextActive]) {
+    const firstPath = nextPaths.sort((a, b) => a.localeCompare(b))[0]
     if (firstPath) {
       sandpack.openFile(firstPath)
     }
@@ -185,9 +201,13 @@ function sortPaths(paths: string[]): string[] {
 }
 
 function isMouseLeavingViewport(event: MouseEvent): boolean {
-  const nextTarget = event.relatedTarget ?? (event as MouseEvent & {
-    toElement?: EventTarget | null
-  }).toElement
+  const nextTarget =
+    event.relatedTarget ??
+    (
+      event as MouseEvent & {
+        toElement?: EventTarget | null
+      }
+    ).toElement
   if (nextTarget) {
     return false
   }
@@ -456,11 +476,12 @@ export function CollabSync({
       debounceTimers.current.clear()
       lastLocalFsTouch.current.clear()
       lastRemoteRevision.current.clear()
+      const previousPaths = filePathsRef.current
       filePathsRef.current = nextFilePaths
       folderPathsRef.current = nextFolders
       setFilePaths(nextFilePaths)
       setFolderPaths(nextFolders)
-      syncSandpackSnapshot(sandpackRef.current, files)
+      syncSandpackSnapshot(sandpackRef.current, files, previousPaths)
       skipOutbound.current = false
       setSnapshotReady(true)
     })
