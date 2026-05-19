@@ -6,14 +6,23 @@ import {
   useSandpack,
 } from '@codesandbox/sandpack-react'
 import { useTheme } from '@mui/material/styles'
-import { forwardRef, useImperativeHandle, useMemo } from 'react'
-import { normalizeSandpackFilePath } from '../../collab/sandpackPaths'
 import {
-  DEFAULT_SANDBOX_FILES,
-  SANDPACK_BOOTSTRAP_FILES,
-  filesForSandpackSync,
-  sanitizeKnownSandboxFileContent,
-} from '../../sandbox/defaultFiles'
+  forwardRef,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from 'react'
+import { normalizeSandpackFilePath } from '../../collab/sandpackPaths'
+import { sandpackFilesSignature } from '../../sandbox/sandpackCode'
+import {
+  SANDPACK_RUNTIME_OPTIONS,
+  SANDPACK_TEMPLATE,
+} from '../../sandbox/sandpackConfig'
+import {
+  filesForPresetPersist,
+  getSandpackProviderFilesFromStored,
+} from '../../sandbox/sandpackResolve'
 import type { TaskPresetFile } from '../../types/api.types'
 import { LocalSandpackFsProvider } from '../LocalSandpackFsProvider'
 import { PlaygroundFileExplorer } from '../PlaygroundFileExplorer'
@@ -26,10 +35,10 @@ const SKIP_PRESET_EXPORT_PATHS = new Set([
   '/yarn.lock',
 ])
 
-function collectPresetFilesFromSandpack(
+function collectVisibleSandpackFiles(
   files: Record<string, unknown>,
-): TaskPresetFile[] {
-  const out: TaskPresetFile[] = []
+): Record<string, string> {
+  const out: Record<string, string> = {}
   for (const path of Object.keys(files).sort((a, b) => a.localeCompare(b))) {
     const entry = files[path]
     if (entry == null || typeof entry !== 'object') {
@@ -47,7 +56,7 @@ function collectPresetFilesFromSandpack(
     if (!normalized || SKIP_PRESET_EXPORT_PATHS.has(normalized)) {
       continue
     }
-    out.push({ path: normalized, content: code })
+    out[normalized] = code
   }
   return out
 }
@@ -61,50 +70,27 @@ export type PresetSandpackWorkspaceProps = {
   initialFiles?: Record<string, string>
 }
 
-function defaultSandpackFiles(): Record<string, { code: string }> {
-  return Object.fromEntries(
-    Object.entries(SANDPACK_BOOTSTRAP_FILES).map(([path, code]) => [
-      path,
-      { code },
-    ]),
-  )
-}
-
-function sandpackFilesFromPresetRecord(
-  initialFiles: Record<string, string> | undefined,
-): Record<string, { code: string }> {
-  if (!initialFiles || Object.keys(initialFiles).length === 0) {
-    return defaultSandpackFiles()
-  }
-  const merged: Record<string, string> = { ...DEFAULT_SANDBOX_FILES }
-  for (const [path, content] of Object.entries(initialFiles)) {
-    const normalized = normalizeSandpackFilePath(path)
-    if (!normalized || SKIP_PRESET_EXPORT_PATHS.has(normalized)) {
-      continue
-    }
-    merged[normalized] = sanitizeKnownSandboxFileContent(normalized, content)
-  }
-  return Object.fromEntries(
-    Object.entries(filesForSandpackSync(merged)).map(([path, code]) => [
-      path,
-      { code },
-    ]),
-  )
-}
-
 const PresetSandpackBindings = forwardRef<PresetSandpackWorkspaceHandle>(
   function PresetSandpackBindings(_, ref) {
     const { sandpack } = useSandpack()
+    const sandpackFilesRef = useRef(sandpack.files)
+    useLayoutEffect(() => {
+      sandpackFilesRef.current = sandpack.files
+    }, [sandpack.files])
 
     useImperativeHandle(
       ref,
       () => ({
         getPresetFiles: () =>
-          collectPresetFilesFromSandpack(
-            sandpack.files as Record<string, unknown>,
-          ),
+          Object.entries(
+            filesForPresetPersist(
+              collectVisibleSandpackFiles(
+                sandpackFilesRef.current as Record<string, unknown>,
+              ),
+            ),
+          ).map(([path, content]) => ({ path, content })),
       }),
-      [sandpack.files],
+      [],
     )
 
     return (
@@ -134,39 +120,25 @@ export const PresetSandpackWorkspace = forwardRef<
   const sandpackTheme = muiTheme.palette.mode
 
   const sandpackFiles = useMemo(
-    () => sandpackFilesFromPresetRecord(initialFiles),
+    (): ReturnType<typeof getSandpackProviderFilesFromStored> =>
+      getSandpackProviderFilesFromStored(initialFiles),
     [initialFiles],
   )
 
-  const sandpackOptions = useMemo(
-    () => ({
-      autorun: true,
-      autoReload: true,
-      recompileMode: 'immediate' as const,
-    }),
-    [],
+  const providerKey = useMemo(
+    (): string => sandpackFilesSignature(sandpackFiles),
+    [sandpackFiles],
   )
-
-  const filesKey = useMemo(() => {
-    if (!initialFiles || Object.keys(initialFiles).length === 0) {
-      return '__default__'
-    }
-    return JSON.stringify(
-      Object.keys(initialFiles)
-        .sort()
-        .map((k) => [k, initialFiles[k]]),
-    )
-  }, [initialFiles])
 
   return (
     <div className="playground playground--fill">
       <div className="playground__spWrap">
         <SandpackProvider
-          key={filesKey}
-          template="vite-react-ts"
+          key={providerKey}
+          template={SANDPACK_TEMPLATE}
           theme={sandpackTheme}
           files={sandpackFiles}
-          options={sandpackOptions}
+          options={SANDPACK_RUNTIME_OPTIONS}
         >
           <PresetSandpackBindings ref={ref} />
         </SandpackProvider>

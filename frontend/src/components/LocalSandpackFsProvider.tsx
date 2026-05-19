@@ -11,24 +11,11 @@ import {
 import { useSandpack } from '@codesandbox/sandpack-react'
 import { normalizeSandpackFilePath } from '../collab/sandpackPaths'
 import { CollabFsContext, type CollabFsContextValue } from './collabFsContext'
+import { readSandpackFileCode } from '../sandbox/sandpackCode'
 import {
   getFoldersForFile,
   normalizeNewFolderPath,
 } from './PlaygroundFileExplorer/utils/paths'
-
-function getFileCode(f: unknown): string | undefined {
-  if (f == null) {
-    return undefined
-  }
-  if (typeof f === 'string') {
-    return f
-  }
-  if (typeof f === 'object' && f !== null && 'code' in f) {
-    const c = (f as { code: unknown }).code
-    return typeof c === 'string' ? c : undefined
-  }
-  return undefined
-}
 
 function sortPaths(paths: string[]): string[] {
   return Array.from(new Set(paths)).sort((a, b) => a.localeCompare(b))
@@ -96,7 +83,7 @@ export function LocalSandpackFsProvider({
         if ('hidden' in raw && (raw as { hidden?: boolean }).hidden) {
           return false
         }
-        return getFileCode(raw) !== undefined
+        return readSandpackFileCode(raw) !== undefined
       })
       .map((path) => normalizeSandpackFilePath(path))
       .filter((path): path is string => Boolean(path))

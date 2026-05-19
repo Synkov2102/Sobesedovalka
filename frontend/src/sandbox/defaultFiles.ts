@@ -190,23 +190,3 @@ export const SANDPACK_BOOTSTRAP_FILES: Record<string, string> = {
   '/App.tsx': DEFAULT_SANDBOX_APP,
   '/styles.css': DEFAULT_SANDBOX_STYLES,
 }
-
-/** Vite-инфраструктуру даёт template `vite-react-ts`; в Sandpack не перезаписываем из Mongo. */
-export const SANDPACK_INFRA_PATHS = new Set(
-  Object.keys(DEFAULT_SANDBOX_FILES).filter(
-    (path) => path !== '/App.tsx' && path !== '/styles.css',
-  ),
-)
-
-export function filesForSandpackSync(
-  merged: Record<string, string>,
-): Record<string, string> {
-  const out: Record<string, string> = { ...SANDPACK_BOOTSTRAP_FILES }
-  for (const [path, content] of Object.entries(merged)) {
-    if (SANDPACK_INFRA_PATHS.has(path)) {
-      continue
-    }
-    out[path] = sanitizeKnownSandboxFileContent(path, content)
-  }
-  return out
-}

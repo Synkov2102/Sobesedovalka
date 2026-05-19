@@ -21,7 +21,8 @@ import { PeerCaretsOverlay } from './PeerCaretsOverlay'
 import { PlaygroundCollabBar } from './PlaygroundCollabBar'
 import { PlaygroundFileExplorer } from './PlaygroundFileExplorer'
 import { useCollabPaste } from './collabPasteContext'
-import { SANDPACK_BOOTSTRAP_FILES } from '../sandbox/defaultFiles'
+import { SANDPACK_TEMPLATE } from '../sandbox/sandpackConfig'
+import { useCollabSandpackProvider } from '../sandbox/useCollabSandpackProvider'
 import { v4 as uuidv4 } from 'uuid'
 import {
   setCodeEditorPasteHandler,
@@ -189,27 +190,12 @@ export function Playground({ onInvalidExplicitRoom }: PlaygroundProps) {
     setCollabPeers(peers)
   }, [])
 
-  /** Stable refs — Sandpack resets all file state whenever `files` identity changes. */
-  const sandpackFiles = useMemo(
-    () =>
-      Object.fromEntries(
-        Object.entries(SANDPACK_BOOTSTRAP_FILES).map(([path, code]) => [
-          path,
-          { code },
-        ]),
-      ),
-    [],
-  )
-  const sandpackOptions = useMemo(
-    () => ({
-      autorun: true,
-      autoReload: true,
-      recompileMode: 'immediate' as const,
-      /** Старт после collab-snapshot — иначе гонка с перезапуском и чёрный экран. */
-      initMode: 'lazy' as const,
-    }),
-    [],
-  )
+  const collabRoomId =
+    parsedRoom.kind === 'explicit' && roomAccess === 'ready'
+      ? parsedRoom.roomId
+      : ''
+  const { providerKey, providerFiles, requestProviderBoot, sandpackOptions } =
+    useCollabSandpackProvider(collabRoomId)
 
   if (parsedRoom.kind === 'missing') {
     return (
@@ -277,15 +263,17 @@ export function Playground({ onInvalidExplicitRoom }: PlaygroundProps) {
     <div className="playground playground--fill">
       <div className="playground__spWrap">
         <SandpackProvider
-          template="vite-react-ts"
+          key={providerKey}
+          template={SANDPACK_TEMPLATE}
           theme={sandpackTheme}
-          files={sandpackFiles}
+          files={providerFiles}
           options={sandpackOptions}
         >
           <CollabSync
             room={roomId}
             clientId={collabClientId}
             onRoster={onCollabRoster}
+            requestProviderBoot={requestProviderBoot}
           >
             <PlaygroundCollabBar
               collabPeers={collabPeers}

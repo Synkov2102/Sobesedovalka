@@ -29,11 +29,8 @@ import {
   getFoldersForFile,
   normalizeNewFolderPath,
 } from './PlaygroundFileExplorer/utils/paths'
-import {
-  DEFAULT_SANDBOX_FILES,
-  filesForSandpackSync,
-  sanitizeKnownSandboxFileContent,
-} from '../sandbox/defaultFiles'
+import { readSandpackFileCode } from '../sandbox/sandpackCode'
+import { handleCollabSnapshot } from '../sandbox/sandpackSnapshot'
 
 function collabWsUrl(): string {
   const raw = import.meta.env.VITE_COLLAB_WS_URL
@@ -44,20 +41,6 @@ function collabWsUrl(): string {
     return window.location.origin
   }
   return 'http://localhost:3000'
-}
-
-function getFileCode(f: unknown): string | undefined {
-  if (f == null) {
-    return undefined
-  }
-  if (typeof f === 'string') {
-    return f
-  }
-  if (typeof f === 'object' && f !== null && 'code' in f) {
-    const c = (f as { code: unknown }).code
-    return typeof c === 'string' ? c : undefined
-  }
-  return undefined
 }
 
 type FsChange = { type: 'fs/change'; path: string; content: string }
@@ -131,71 +114,6 @@ function normalizeFolderList(
   return Array.from(normalized).sort((a, b) => a.localeCompare(b))
 }
 
-function normalizeSnapshotFiles(raw: unknown): Record<string, string> {
-  /** База — полный Vite-шаблон; снапшот комнаты перекрывает только сохранённые файлы. */
-  const out: Record<string, string> = { ...DEFAULT_SANDBOX_FILES }
-  if (!raw || typeof raw !== 'object') {
-    return out
-  }
-
-  Object.entries(raw as Record<string, unknown>).forEach(([path, content]) => {
-    const normalizedPath = normalizeSandpackFilePath(path)
-    if (!normalizedPath || typeof content !== 'string') {
-      return
-    }
-    out[normalizedPath] = sanitizeKnownSandboxFileContent(
-      normalizedPath,
-      content,
-    )
-  })
-  return out
-}
-
-function syncSandpackSnapshot(
-  sandpack: ReturnType<typeof useSandpack>['sandpack'],
-  files: Record<string, string>,
-  previousPaths: string[],
-) {
-  const merged: Record<string, string> = { ...DEFAULT_SANDBOX_FILES, ...files }
-  const sandpackFiles = filesForSandpackSync(merged)
-  const nextPaths = Object.keys(sandpackFiles)
-  let touched = false
-
-  Object.entries(sandpackFiles).forEach(([path, content]) => {
-    const cur = getFileCode(sandpack.files[path])
-    if (cur !== content) {
-      sandpack.updateFile(path, content, false)
-      touched = true
-    }
-  })
-
-  const pathsToDelete = previousPaths
-    .filter((path) => !nextPaths.includes(path))
-    .filter((path) => sandpack.files[path])
-    .sort((a, b) => b.length - a.length)
-
-  pathsToDelete.forEach((path) => {
-    if (sandpack.files[path]) {
-      sandpack.deleteFile(path, false)
-      touched = true
-    }
-  })
-
-  const nextActive = normalizeSandpackFilePath(sandpack.activeFile ?? '')
-  if (!merged[nextActive]) {
-    const firstPath = nextPaths.sort((a, b) => a.localeCompare(b))[0]
-    if (firstPath) {
-      sandpack.openFile(firstPath)
-    }
-  }
-
-  if (touched) {
-    queueMicrotask(() => {
-      void sandpack.runSandpack()
-    })
-  }
-}
-
 function sortPaths(paths: string[]): string[] {
   return Array.from(new Set(paths)).sort((a, b) => a.localeCompare(b))
 }
@@ -225,12 +143,15 @@ export function CollabSync({
   clientId,
   onRoster,
   onWelcome,
+  requestProviderBoot,
   children,
 }: {
   room: string
   clientId: string
   onRoster?: (peers: CollabPeerDTO[], count: number) => void
   onWelcome?: (welcome: CollabWelcomePayload) => void
+  /** Первый snapshot с кастомным пресетом — remount `SandpackProvider` в Playground. */
+  requestProviderBoot?: (merged: Record<string, string>) => boolean
   children?: ReactNode
 }) {
   const { sandpack, listen } = useSandpack()
@@ -245,6 +166,8 @@ export function CollabSync({
   const sandpackRef = useRef(sandpack)
   const filePathsRef = useRef<string[]>([])
   const folderPathsRef = useRef<string[]>([])
+  /** Пути, реально переданные в Sandpack при последнем snapshot (≠ полный merged из Mongo). */
+  const sandpackSyncedPathsRef = useRef<string[]>([])
   const lastPresence = useRef({
     file: '',
     anchorLine: 0,
@@ -256,11 +179,13 @@ export function CollabSync({
   const lastRemoteRevision = useRef<Map<string, number>>(new Map())
   const onRosterRef = useRef(onRoster)
   const onWelcomeRef = useRef(onWelcome)
+  const requestProviderBootRef = useRef(requestProviderBoot)
   useLayoutEffect(() => {
     sandpackRef.current = sandpack
     onRosterRef.current = onRoster
     onWelcomeRef.current = onWelcome
-  }, [sandpack, onRoster, onWelcome])
+    requestProviderBootRef.current = requestProviderBoot
+  }, [sandpack, onRoster, onWelcome, requestProviderBoot])
 
   useEffect(() => {
     filePathsRef.current = filePaths
@@ -462,26 +387,29 @@ export function CollabSync({
     )
 
     socket.on('collab-snapshot', (payload: CollabSnapshotPayload) => {
-      const files = normalizeSnapshotFiles(payload?.files)
-      const nextFilePaths = Object.keys(files).sort((a, b) =>
-        a.localeCompare(b),
-      )
-      const nextFolders = normalizeFolderList(
-        nextFilePaths,
-        Array.isArray(payload?.folders) ? payload.folders : [],
-      )
-
       skipOutbound.current = true
       debounceTimers.current.forEach((t) => clearTimeout(t))
       debounceTimers.current.clear()
       lastLocalFsTouch.current.clear()
       lastRemoteRevision.current.clear()
-      const previousPaths = filePathsRef.current
-      filePathsRef.current = nextFilePaths
+
+      const result = handleCollabSnapshot({
+        payload,
+        sandpack: sandpackRef.current,
+        previousSyncedPaths: sandpackSyncedPathsRef.current,
+        requestProviderBoot: requestProviderBootRef.current,
+      })
+
+      const nextFolders = normalizeFolderList(
+        result.explorerPaths,
+        Array.isArray(payload?.folders) ? payload.folders : [],
+      )
+
+      sandpackSyncedPathsRef.current = result.syncPaths
+      filePathsRef.current = result.explorerPaths
       folderPathsRef.current = nextFolders
-      setFilePaths(nextFilePaths)
+      setFilePaths(result.explorerPaths)
       setFolderPaths(nextFolders)
-      syncSandpackSnapshot(sandpackRef.current, files, previousPaths)
       skipOutbound.current = false
       setSnapshotReady(true)
     })
@@ -517,7 +445,7 @@ export function CollabSync({
           return next
         })
 
-        const cur = getFileCode(sandpackRef.current.files[path])
+        const cur = readSandpackFileCode(sandpackRef.current.files[path])
         if (cur === p.content) {
           return
         }
