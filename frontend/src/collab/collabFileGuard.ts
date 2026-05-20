@@ -172,16 +172,23 @@ export function decideInboundFileUpdate(args: {
     return { action: 'skip', reason: 'stale-rev' }
   }
 
-  if (args.currentContent === args.payload.content) {
+  if (args.isLocalDirty) {
+    if (args.currentContent === args.payload.content) {
+      return { action: 'skip', reason: 'unchanged' }
+    }
+    if (isStaleShorterPrefix(args.payload.content, args.currentContent)) {
+      return { action: 'skip', reason: 'stale-shorter-prefix' }
+    }
+    return { action: 'queue', reason: 'local-dirty', payload: args.payload }
+  }
+
+  const baseline = args.emittedContent
+  if (baseline !== undefined && baseline === args.payload.content) {
     return { action: 'skip', reason: 'unchanged' }
   }
 
-  if (isStaleShorterPrefix(args.payload.content, args.currentContent)) {
-    return { action: 'skip', reason: 'stale-shorter-prefix' }
-  }
-
-  if (args.isLocalDirty) {
-    return { action: 'queue', reason: 'local-dirty', payload: args.payload }
+  if (args.currentContent === args.payload.content) {
+    return { action: 'skip', reason: 'unchanged' }
   }
 
   return { action: 'apply', payload: args.payload }

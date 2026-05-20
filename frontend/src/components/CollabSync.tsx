@@ -44,6 +44,7 @@ import {
   normalizeNewFolderPath,
 } from './PlaygroundFileExplorer/utils/paths'
 import { readSandpackFileCode } from '../sandbox/sandpackCode'
+import { resolveSandpackLayout } from '../sandbox/sandpackResolve'
 import { handleCollabSnapshot } from '../sandbox/sandpackSnapshot'
 
 function collabWsUrl(): string {
@@ -173,12 +174,16 @@ export function CollabSync({
   })
   const lastRemoteRevision = useRef<Map<string, number>>(new Map())
   const inboundApplySuppressUntil = useRef<Map<string, number>>(new Map())
-  /** Последний текст, отправленный на сервер (если редактор ≠ этому — есть несохранённые правки). */
+  /** Базовая версия файла на сервере (snapshot / emit / remote apply). */
   const lastEmittedContent = useRef<Map<string, string>>(new Map())
+  /** Пути, которые пользователь реально менял с клавиатуры в этой сессии. */
+  const userEditedPaths = useRef<Set<string>>(new Set())
   const pendingRemoteFile = useRef<Map<string, RemoteFilePayload>>(new Map())
+  const snapshotMergedRef = useRef<Record<string, string>>({})
   const editorSyncOpsRef = useRef({
     readPathContent: (_path: string): string => '',
     flushPendingRemote: (_path: string): void => {},
+    flushAllPendingRemote: (): void => {},
   })
   const onRosterRef = useRef(onRoster)
   const onWelcomeRef = useRef(onWelcome)
@@ -227,6 +232,7 @@ export function CollabSync({
       folderPathsRef.current = nextFolders
       setFolderPaths(nextFolders)
 
+      userEditedPaths.current.add(normalizedPath)
       const outbound = validateOutboundFile({
         path: normalizedPath,
         content,
@@ -340,11 +346,27 @@ export function CollabSync({
       readSandpackFileCode(sandpackRef.current.files[path]) ?? ''
 
     const isLocalDirty = (path: string): boolean => {
+      if (!userEditedPaths.current.has(path)) {
+        return false
+      }
       const emitted = lastEmittedContent.current.get(path)
       if (emitted === undefined) {
         return false
       }
       return readPathContent(path) !== emitted
+    }
+
+    const seedEmittedBaseline = (merged: Record<string, string>) => {
+      const layout = resolveSandpackLayout(merged)
+      for (const [path, content] of Object.entries(layout.syncFiles)) {
+        lastEmittedContent.current.set(path, content)
+      }
+    }
+
+    const flushAllPendingRemote = () => {
+      for (const path of [...pendingRemoteFile.current.keys()]) {
+        flushPendingRemote(path)
+      }
     }
 
     const queuePendingRemote = (path: string, payload: RemoteFilePayload) => {
@@ -387,6 +409,16 @@ export function CollabSync({
     }
 
     const applyRemoteFileNow = (path: string, p: RemoteFilePayload) => {
+      if (sandpackRef.current.status !== 'running') {
+        queuePendingRemote(path, p)
+        collabSyncLog('editor', 'remote-file-defer', {
+          reason: 'sandpack-not-ready',
+          path,
+          from: p.from,
+          rev: p.rev,
+        })
+        return
+      }
       if (p.rev !== undefined) {
         lastRemoteRevision.current.set(path, Math.floor(p.rev))
       }
@@ -470,13 +502,18 @@ export function CollabSync({
       applyRemoteFileNow(path, decision.payload)
     }
 
-    editorSyncOpsRef.current = { readPathContent, flushPendingRemote }
+    editorSyncOpsRef.current = {
+      readPathContent,
+      flushPendingRemote,
+      flushAllPendingRemote,
+    }
 
     const onConnect = () => {
       collabSyncLog('socket', 'connect', { room, clientId })
       setSnapshotReady(false)
       lastRemoteRevision.current.clear()
       lastEmittedContent.current.clear()
+      userEditedPaths.current.clear()
       pendingRemoteFile.current.clear()
       lastPresence.current = {
         file: '',
@@ -574,6 +611,7 @@ export function CollabSync({
       debounceTimers.current.clear()
       lastRemoteRevision.current.clear()
       lastEmittedContent.current.clear()
+      userEditedPaths.current.clear()
       pendingRemoteFile.current.clear()
 
       const result = handleCollabSnapshot({
@@ -595,13 +633,12 @@ export function CollabSync({
       setFolderPaths(nextFolders)
       skipOutbound.current = false
       setSnapshotReady(true)
-      for (const path of result.syncPaths) {
-        const code = readPathContent(path)
-        if (code.length > 0 || sandpackRef.current.files[path]) {
-          lastEmittedContent.current.set(path, code)
-        }
-      }
+      snapshotMergedRef.current = result.merged
+      seedEmittedBaseline(result.merged)
       pendingRemoteFile.current.clear()
+      if (sandpackRef.current.status === 'running') {
+        flushAllPendingRemote()
+      }
       collabSyncLog('snapshot', 'applied', {
         room,
         skippedSandpackApply: result.skippedSandpackApply,
@@ -720,6 +757,7 @@ export function CollabSync({
           })
           return
         }
+        userEditedPaths.current.add(normalizedPath)
         const prev = debounceTimers.current.get(normalizedPath)
         if (prev) {
           clearTimeout(prev)
@@ -811,6 +849,17 @@ export function CollabSync({
       headCol: 0,
     }
   }, [sandpack.activeFile, sandpack.status, snapshotReady])
+
+  useEffect(() => {
+    if (sandpack.status !== 'running' || !snapshotReady) {
+      return
+    }
+    const layout = resolveSandpackLayout(snapshotMergedRef.current)
+    for (const [path, content] of Object.entries(layout.syncFiles)) {
+      lastEmittedContent.current.set(path, content)
+    }
+    editorSyncOpsRef.current.flushAllPendingRemote()
+  }, [sandpack.status, snapshotReady])
 
   useEffect(() => {
     if (sandpack.status !== 'running') {
