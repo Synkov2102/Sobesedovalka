@@ -1,6 +1,6 @@
 import type { Text } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSandpack } from '@codesandbox/sandpack-react'
 import type { CollabPeerDTO } from '../collab/collab.types'
@@ -87,6 +87,31 @@ type PeerMark = {
   selection: Array<{ left: number; top: number; width: number; height: number }>
 }
 
+function coordKey(value: number): number {
+  return Math.round(value * 2) / 2
+}
+
+function marksKey(marks: PeerMark[]): string {
+  return marks
+    .map((m) => {
+      const caret = m.caret
+        ? `${coordKey(m.caret.left)},${coordKey(m.caret.top)},${coordKey(
+            m.caret.height,
+          )}`
+        : ''
+      const selection = m.selection
+        .map(
+          (r) =>
+            `${coordKey(r.left)},${coordKey(r.top)},${coordKey(
+              r.width,
+            )},${coordKey(r.height)}`,
+        )
+        .join(';')
+      return `${m.id}:${m.name}:${m.color}:${caret}:${selection}`
+    })
+    .join('|')
+}
+
 export function PeerCaretsOverlay({
   selfId,
   peers,
@@ -96,15 +121,24 @@ export function PeerCaretsOverlay({
 }) {
   const { sandpack } = useSandpack()
   const [marks, setMarks] = useState<PeerMark[]>([])
+  const marksKeyRef = useRef('')
 
   useEffect(() => {
     let raf = 0
+    const updateMarks = (next: PeerMark[]) => {
+      const nextKey = marksKey(next)
+      if (nextKey === marksKeyRef.current) {
+        return
+      }
+      marksKeyRef.current = nextKey
+      setMarks(next)
+    }
     const tick = () => {
       const cm = document.querySelector(
         '.playground__sandpack .sp-editor .cm-content',
       )
       if (!cm || !(cm instanceof HTMLElement)) {
-        setMarks([])
+        updateMarks([])
         raf = requestAnimationFrame(tick)
         return
       }
@@ -155,7 +189,7 @@ export function PeerCaretsOverlay({
           }
         }
       }
-      setMarks(next)
+      updateMarks(next)
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)

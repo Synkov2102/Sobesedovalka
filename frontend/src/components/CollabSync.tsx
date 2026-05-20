@@ -48,7 +48,10 @@ import {
 } from './PlaygroundFileExplorer/utils/paths'
 import { readSandpackFileCode } from '../sandbox/sandpackCode'
 import { handleCollabSnapshot } from '../sandbox/sandpackSnapshot'
-import { setSandpackYjsBindingProvider } from '../collab/sandpackYjsBinding'
+import {
+  applyYjsContentToActiveSandpackEditor,
+  setSandpackYjsBindingProvider,
+} from '../collab/sandpackYjsBinding'
 
 type FsChange = { type: 'fs/change'; path: string; content: string }
 type FsRemove = { type: 'fs/remove'; path: string }
@@ -283,27 +286,43 @@ export function CollabSync({
     const files = readYjsFiles(doc)
     const nextPaths = sortPaths(Object.keys(files))
     let touchedPath: string | null = null
+    const active = normalizeSandpackFilePath(
+      sandpackRef.current.activeFile ?? '',
+    )
 
     skipOutbound.current = true
     collabSyncLog('sandpack-apply', 'start', {
       fileCount: nextPaths.length,
       previousSyncedCount: sandpackSyncedPathsRef.current.length,
-      activeFile: sandpackRef.current.activeFile ?? '',
+      activeFile: active,
     })
     for (const [path, content] of Object.entries(files)) {
       const currentContent = readSandpackFileCode(
         sandpackRef.current.files[path],
       )
       if (currentContent !== content) {
+        if (
+          path === active &&
+          applyYjsContentToActiveSandpackEditor(path, content)
+        ) {
+          collabSyncLog('sandpack-apply', 'update-active-editor', {
+            path,
+            currentLen: currentContent?.length ?? 0,
+            nextLen: content.length,
+          })
+          touchedPath = path
+          continue
+        }
+
+        suppressSandpackUntil.current.set(
+          path,
+          Date.now() + SANDPACK_APPLY_SUPPRESS_MS,
+        )
         collabSyncLog('sandpack-apply', 'update-file', {
           path,
           currentLen: currentContent?.length ?? 0,
           nextLen: content.length,
         })
-        suppressSandpackUntil.current.set(
-          path,
-          Date.now() + SANDPACK_APPLY_SUPPRESS_MS,
-        )
         sandpackRef.current.updateFile(path, content, false)
         touchedPath = path
       }
@@ -322,9 +341,6 @@ export function CollabSync({
     }
     sandpackSyncedPathsRef.current = nextPaths
 
-    const active = normalizeSandpackFilePath(
-      sandpackRef.current.activeFile ?? '',
-    )
     if (nextPaths.length > 0 && !files[active]) {
       collabSyncLog('sandpack-apply', 'open-first-file', {
         previousActive: active,
@@ -334,22 +350,6 @@ export function CollabSync({
     }
     skipOutbound.current = false
 
-    if (touchedPath) {
-      const recompilePath = files[touchedPath] ? touchedPath : nextPaths[0]
-      if (recompilePath && files[recompilePath] !== undefined) {
-        collabSyncLog('sandpack-apply', 'trigger-recompile-file', {
-          path: recompilePath,
-        })
-        sandpackRef.current.updateFile(
-          recompilePath,
-          files[recompilePath],
-          true,
-        )
-      } else {
-        collabSyncLog('sandpack-apply', 'trigger-run-sandpack')
-        void sandpackRef.current.runSandpack()
-      }
-    }
     collabSyncLog('sandpack-apply', 'done', {
       touched: Boolean(touchedPath),
       touchedPath,

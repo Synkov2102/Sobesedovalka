@@ -15,13 +15,30 @@ const SANDPACK_INFRA_PATHS = new Set(
   ),
 )
 
-const DEFAULT_SANDPACK_PROVIDER_FILES: SandpackProviderFiles =
-  Object.fromEntries(
-    Object.entries(DEFAULT_SANDBOX_FILES).map(([path, code]) => [
-      path,
-      { code },
-    ]),
-  )
+function isValidPackageJson(content: string): boolean {
+  if (!content.trim()) {
+    return false
+  }
+  try {
+    const parsed: unknown = JSON.parse(content)
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+  } catch {
+    return false
+  }
+}
+
+function shouldSkipSandpackInfraFile(path: string, content: string): boolean {
+  if (!SANDPACK_INFRA_PATHS.has(path)) {
+    return false
+  }
+  if (content === DEFAULT_SANDBOX_FILES[path]) {
+    return true
+  }
+  if (path === '/package.json' && !isValidPackageJson(content)) {
+    return true
+  }
+  return false
+}
 
 export type SandpackLayoutResolution = {
   custom: boolean
@@ -88,12 +105,10 @@ function buildSandpackSyncFiles(
   merged: Record<string, string>,
   custom: boolean,
 ): Record<string, string> {
-  const out: Record<string, string> = custom
-    ? {}
-    : { ...SANDPACK_BOOTSTRAP_FILES }
+  const out: Record<string, string> = { ...SANDPACK_BOOTSTRAP_FILES }
 
   for (const [path, content] of Object.entries(merged)) {
-    if (!custom && SANDPACK_INFRA_PATHS.has(path)) {
+    if (shouldSkipSandpackInfraFile(path, content)) {
       continue
     }
     out[path] = sanitizeKnownSandboxFileContent(path, content)
@@ -113,7 +128,10 @@ function ensureSandboxEntryPoints(
       ? '/src/main.jsx'
       : null
 
-  if (srcMain && out['/index.html'] === DEFAULT_SANDBOX_INDEX_HTML) {
+  if (
+    srcMain &&
+    (!out['/index.html'] || out['/index.html'] === DEFAULT_SANDBOX_INDEX_HTML)
+  ) {
     out['/index.html'] = DEFAULT_SANDBOX_INDEX_HTML.replace(
       'src="/index.tsx"',
       `src="${srcMain}"`,
@@ -185,9 +203,9 @@ function standardProviderFiles(
   syncFiles: Record<string, string>,
 ): SandpackProviderFiles {
   if (Object.keys(syncFiles).length === 0) {
-    return DEFAULT_SANDPACK_PROVIDER_FILES
+    return toSandpackProviderFiles(SANDPACK_BOOTSTRAP_FILES)
   }
-  return toSandpackProviderFiles({ ...DEFAULT_SANDBOX_FILES, ...syncFiles })
+  return toSandpackProviderFiles(syncFiles)
 }
 
 /** Файлы для `SandpackProvider`: полный Vite-шаблон или весь кастомный пресет. */
