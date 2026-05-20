@@ -15,6 +15,12 @@ import {
   pickHueUniqueInRoom,
   syncPeerPresenceColors,
 } from './collab-color';
+import {
+  isStoredFileContentUnchanged,
+  normalizeCollabClientId,
+  parseCollabFilePath,
+  parseCollabFileUpdate,
+} from './collab-file-guard';
 import { normalizeSandpackFilePath } from './sandpack-paths';
 import {
   mergeWithDefaultSandboxFiles,
@@ -104,6 +110,14 @@ export class CollabGateway implements OnGatewayDisconnect {
     { room: string; clientId: string }
   >();
   private readonly lastRosterPayload = new Map<string, string>();
+  private readonly lastPresenceRosterAt = new Map<string, number>();
+  private readonly filePersistTimers = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
+
+  private static readonly PRESENCE_ROSTER_THROTTLE_MS = 80;
+  private static readonly FILE_PERSIST_DEBOUNCE_MS = 750;
 
   /** Same logical client can have several sockets (reconnect, React StrictMode). */
   private socketCountForClient(room: string, clientId: string): number {
@@ -203,8 +217,22 @@ export class CollabGateway implements OnGatewayDisconnect {
       hue: peer.hue as number,
       colorHex: peer.colorHex as string,
     });
-    client.emit('collab-snapshot', this.snapshot(room));
+    const snap = this.snapshot(room);
+    this.syncLog('join-snapshot', {
+      room,
+      clientId,
+      fileCount: Object.keys(snap.files).length,
+      folderCount: snap.folders.length,
+    });
+    client.emit('collab-snapshot', snap);
     this.broadcastRoster(room);
+  }
+
+  private syncLog(
+    event: string,
+    detail: Record<string, string | number | boolean>,
+  ): void {
+    this.logger.log(`[collab-sync] ${event} ${JSON.stringify(detail)}`);
   }
 
   @SubscribeMessage('collab-presence')
@@ -272,7 +300,14 @@ export class CollabGateway implements OnGatewayDisconnect {
         .catch((e: unknown) => this.logger.warn(String(e)));
     }
 
-    this.broadcastRoster(room);
+    const now = Date.now();
+    const lastRoster = this.lastPresenceRosterAt.get(room) ?? 0;
+    if (
+      now - lastRoster >= CollabGateway.PRESENCE_ROSTER_THROTTLE_MS
+    ) {
+      this.lastPresenceRosterAt.set(room, now);
+      this.broadcastRoster(room);
+    }
   }
 
   @SubscribeMessage('collab-announce')
@@ -380,15 +415,15 @@ export class CollabGateway implements OnGatewayDisconnect {
       content?: string;
       from?: string;
     },
+    @ConnectedSocket() client: Socket,
   ): void {
-    const room = typeof body?.room === 'string' ? body.room : '';
-    const path =
-      typeof body?.path === 'string'
-        ? normalizeSandpackFilePath(body.path)
-        : '';
-    const content = typeof body?.content === 'string' ? body.content : '';
-    const from = typeof body?.from === 'string' ? body.from : '';
-    if (!room || !path) {
+    const parsed = parseCollabFileUpdate(body);
+    if (!parsed.ok) {
+      this.syncLog('editor-file-reject', { reason: parsed.reason });
+      return;
+    }
+    const { room, path, content, from } = parsed.value;
+    if (!this.assertSocketSender(client, room, from)) {
       return;
     }
     if (!this.roomFiles.has(room)) {
@@ -397,16 +432,53 @@ export class CollabGateway implements OnGatewayDisconnect {
     if (!this.roomFileRevisions.has(room)) {
       this.roomFileRevisions.set(room, new Map());
     }
-    this.roomFiles.get(room)!.set(path, content);
+    const files = this.roomFiles.get(room)!;
+    if (isStoredFileContentUnchanged(files.get(path), content)) {
+      this.syncLog('editor-file-reject', {
+        reason: 'unchanged',
+        room,
+        path,
+        from,
+      });
+      return;
+    }
+    files.set(path, content);
     const revisionMap = this.roomFileRevisions.get(room)!;
     const nextRevision = (revisionMap.get(path) ?? 0) + 1;
     revisionMap.set(path, nextRevision);
-    void this.mongoRepo
-      .upsertFile(room, path, content)
-      .catch((e: unknown) => this.logger.warn(String(e)));
+    this.syncLog('editor-file', {
+      room,
+      path,
+      from,
+      rev: nextRevision,
+      contentLen: content.length,
+    });
+    this.scheduleFilePersist(room, path, content);
     this.server
       .to(room)
       .emit('collab-file', { path, content, from, rev: nextRevision });
+  }
+
+  /** WS-рассылка сразу; Mongo — с debounce, чтобы не тормозить на каждом keystroke. */
+  private scheduleFilePersist(
+    room: string,
+    path: string,
+    content: string,
+  ): void {
+    const key = `${room}\0${path}`;
+    const prev = this.filePersistTimers.get(key);
+    if (prev) {
+      clearTimeout(prev);
+    }
+    this.filePersistTimers.set(
+      key,
+      setTimeout(() => {
+        this.filePersistTimers.delete(key);
+        void this.mongoRepo
+          .upsertFile(room, path, content)
+          .catch((e: unknown) => this.logger.warn(String(e)));
+      }, CollabGateway.FILE_PERSIST_DEBOUNCE_MS),
+    );
   }
 
   @SubscribeMessage('collab-remove')
@@ -417,17 +489,33 @@ export class CollabGateway implements OnGatewayDisconnect {
       path?: string;
       from?: string;
     },
+    @ConnectedSocket() client: Socket,
   ): void {
-    const room = typeof body?.room === 'string' ? body.room : '';
+    const room = typeof body?.room === 'string' ? body.room.trim() : '';
     const path =
-      typeof body?.path === 'string'
-        ? normalizeSandpackFilePath(body.path)
-        : '';
-    const from = typeof body?.from === 'string' ? body.from : '';
-    if (!room || !path) {
+      typeof body?.path === 'string' ? parseCollabFilePath(body.path) : null;
+    const from =
+      typeof body?.from === 'string'
+        ? normalizeCollabClientId(body.from)
+        : null;
+    if (!room || !path || !from) {
+      this.syncLog('editor-remove-reject', { reason: 'invalid-payload' });
+      return;
+    }
+    if (!this.assertSocketSender(client, room, from)) {
       return;
     }
     if (!this.roomFiles.has(room)) {
+      return;
+    }
+    const files = this.roomFiles.get(room)!;
+    if (!files.has(path)) {
+      this.syncLog('editor-remove-reject', {
+        reason: 'unchanged',
+        room,
+        path,
+        from,
+      });
       return;
     }
     if (!this.roomFileRevisions.has(room)) {
@@ -436,13 +524,36 @@ export class CollabGateway implements OnGatewayDisconnect {
     const revisionMap = this.roomFileRevisions.get(room)!;
     const nextRevision = (revisionMap.get(path) ?? 0) + 1;
     revisionMap.set(path, nextRevision);
-    this.roomFiles.get(room)!.delete(path);
+    files.delete(path);
     void this.mongoRepo
       .deleteFile(room, path)
       .catch((e: unknown) => this.logger.warn(String(e)));
     this.server
       .to(room)
       .emit('collab-remove', { path, from, rev: nextRevision });
+  }
+
+  /** Сокет должен быть в комнате и `from` совпадать с clientId сессии. */
+  private assertSocketSender(
+    client: Socket,
+    room: string,
+    from: string,
+  ): boolean {
+    const meta = this.socketMeta.get(client.id);
+    if (!meta || meta.room !== room) {
+      this.syncLog('editor-file-reject', { reason: 'not-in-room', room, from });
+      return false;
+    }
+    if (meta.clientId !== from) {
+      this.syncLog('editor-file-reject', {
+        reason: 'from-mismatch',
+        room,
+        from,
+        socketClientId: meta.clientId,
+      });
+      return false;
+    }
+    return true;
   }
 
   @SubscribeMessage('collab-folders-sync')

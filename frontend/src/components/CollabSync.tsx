@@ -17,7 +17,21 @@ import {
   normalizePeerColorHexWire,
   normalizePeerHueWire,
 } from '../collab/peerColor'
+import {
+  decideInboundFileUpdate,
+  parseRemoteFileWire,
+  parseRemoteRemoveWire,
+  validateOutboundFile,
+  validateOutboundRemove,
+  type RemoteFilePayload,
+  type RemoteFileWire,
+  type RemoteRemoveWire,
+} from '../collab/collabFileGuard'
 import { normalizeSandpackFilePath } from '../collab/sandpackPaths'
+import {
+  collabSyncLog,
+  collabSyncTextMeta,
+} from '../collab/collabSyncLog'
 import { readSandpackSelection } from '../collab/sandpackCursor'
 import { getAccessToken } from '../auth/tokenStorage'
 import { CollabFsContext } from './collabFsContext'
@@ -69,28 +83,10 @@ function isFsRemove(m: unknown): m is FsRemove {
   )
 }
 
-/** Ignore remote full-file updates shortly after local keystrokes — avoids
- * stale snapshots from debounced peers overwriting fast typing. */
-const REMOTE_FILE_GUARD_MS = 420
-const COLLAB_FILE_DEBOUNCE_MS = 320
+const COLLAB_FILE_DEBOUNCE_MS = 180
+/** Подавляет эхо fs/change после programmatic updateFile от пира. */
+const INBOUND_APPLY_SUPPRESS_MS = 120
 const PAGE_LEAVE_EVENT_COOLDOWN_MS = 5000
-
-/** Drop stale peer payloads: local doc strictly extended what remote still has. */
-function isStaleShorterPrefix(
-  path: string,
-  incoming: string,
-  cur: string | undefined,
-  lastLocalFsTouch: Map<string, number>,
-): boolean {
-  if (cur == null || cur.length <= incoming.length) {
-    return false
-  }
-  if (!cur.startsWith(incoming)) {
-    return false
-  }
-  const t = lastLocalFsTouch.get(path)
-  return t != null && Date.now() - t < REMOTE_FILE_GUARD_MS * 2
-}
 
 function normalizeFolderList(
   filePaths: string[],
@@ -175,8 +171,15 @@ export function CollabSync({
     headLine: 0,
     headCol: 0,
   })
-  const lastLocalFsTouch = useRef<Map<string, number>>(new Map())
   const lastRemoteRevision = useRef<Map<string, number>>(new Map())
+  const inboundApplySuppressUntil = useRef<Map<string, number>>(new Map())
+  /** Последний текст, отправленный на сервер (если редактор ≠ этому — есть несохранённые правки). */
+  const lastEmittedContent = useRef<Map<string, string>>(new Map())
+  const pendingRemoteFile = useRef<Map<string, RemoteFilePayload>>(new Map())
+  const editorSyncOpsRef = useRef({
+    readPathContent: (_path: string): string => '',
+    flushPendingRemote: (_path: string): void => {},
+  })
   const onRosterRef = useRef(onRoster)
   const onWelcomeRef = useRef(onWelcome)
   const requestProviderBootRef = useRef(requestProviderBoot)
@@ -224,12 +227,31 @@ export function CollabSync({
       folderPathsRef.current = nextFolders
       setFolderPaths(nextFolders)
 
-      socketRef.current?.emit('collab-file', {
-        room,
+      const outbound = validateOutboundFile({
         path: normalizedPath,
         content,
-        from: clientId,
+        clientId,
       })
+      if (!outbound.ok) {
+        collabSyncLog('editor', 'local-file-skip', {
+          reason: outbound.reason,
+          path: normalizedPath,
+        })
+        return
+      }
+      collabSyncLog('editor', 'save-file-emit', {
+        path: outbound.path,
+        room,
+        ...collabSyncTextMeta(outbound.content),
+      })
+      lastEmittedContent.current.set(outbound.path, outbound.content)
+      socketRef.current?.emit('collab-file', {
+        room,
+        path: outbound.path,
+        content: outbound.content,
+        from: outbound.from,
+      })
+      editorSyncOpsRef.current.flushPendingRemote(outbound.path)
     },
     [clientId, room],
   )
@@ -280,10 +302,23 @@ export function CollabSync({
       folderPathsRef.current = nextFolders
       setFolderPaths(nextFolders)
 
+      const outbound = validateOutboundRemove({
+        path: normalizedPath,
+        clientId,
+      })
+      if (!outbound.ok) {
+        collabSyncLog('editor', 'local-remove-skip', {
+          reason: outbound.reason,
+          path: normalizedPath,
+        })
+        return
+      }
+      lastEmittedContent.current.delete(outbound.path)
+      pendingRemoteFile.current.delete(outbound.path)
       socketRef.current?.emit('collab-remove', {
         room,
-        path: normalizedPath,
-        from: clientId,
+        path: outbound.path,
+        from: outbound.from,
       })
     },
     [clientId, room],
@@ -301,9 +336,148 @@ export function CollabSync({
     })
     socketRef.current = socket
 
+    const readPathContent = (path: string): string =>
+      readSandpackFileCode(sandpackRef.current.files[path]) ?? ''
+
+    const isLocalDirty = (path: string): boolean => {
+      const emitted = lastEmittedContent.current.get(path)
+      if (emitted === undefined) {
+        return false
+      }
+      return readPathContent(path) !== emitted
+    }
+
+    const queuePendingRemote = (path: string, payload: RemoteFilePayload) => {
+      const prev = pendingRemoteFile.current.get(path)
+      const prevRev = prev?.rev ?? 0
+      const nextRev = payload.rev ?? 0
+      if (!prev || nextRev >= prevRev) {
+        pendingRemoteFile.current.set(path, payload)
+      }
+    }
+
+    const flushPendingRemote = (path: string) => {
+      const pending = pendingRemoteFile.current.get(path)
+      if (!pending) {
+        return
+      }
+      const decision = decideInboundFileUpdate({
+        payload: pending,
+        selfClientId: clientId,
+        currentRev: lastRemoteRevision.current.get(path) ?? 0,
+        currentContent: readPathContent(path),
+        emittedContent: lastEmittedContent.current.get(path),
+        isLocalDirty: isLocalDirty(path),
+      })
+      if (decision.action === 'queue') {
+        return
+      }
+      pendingRemoteFile.current.delete(path)
+      if (decision.action === 'skip') {
+        collabSyncLog('editor', 'remote-file-skip', {
+          reason: decision.reason,
+          path,
+          from: pending.from,
+          rev: pending.rev,
+          phase: 'flush-pending',
+        })
+        return
+      }
+      applyRemoteFileNow(path, decision.payload)
+    }
+
+    const applyRemoteFileNow = (path: string, p: RemoteFilePayload) => {
+      if (p.rev !== undefined) {
+        lastRemoteRevision.current.set(path, Math.floor(p.rev))
+      }
+
+      inboundApplySuppressUntil.current.set(
+        path,
+        Date.now() + INBOUND_APPLY_SUPPRESS_MS,
+      )
+      skipOutbound.current = true
+      collabSyncLog('editor', 'remote-file-apply', {
+        path,
+        from: p.from,
+        rev: p.rev,
+        ...collabSyncTextMeta(p.content),
+      })
+      sandpackRef.current.updateFile(path, p.content, false)
+      skipOutbound.current = false
+      lastEmittedContent.current.set(path, p.content)
+    }
+
+    const registerRemotePath = (path: string) => {
+      setFilePaths((prev) => {
+        const next = prev.includes(path)
+          ? prev
+          : [...prev, path].sort((a, b) => a.localeCompare(b))
+        filePathsRef.current = next
+        setFolderPaths((currentFolders) => {
+          const nextFolders = normalizeFolderList(next, currentFolders)
+          folderPathsRef.current = nextFolders
+          return nextFolders
+        })
+        return next
+      })
+    }
+
+    const handleRemoteFile = (wire: RemoteFileWire) => {
+      const parsed = parseRemoteFileWire(wire)
+      if (!parsed.ok) {
+        collabSyncLog('editor', 'remote-file-skip', { reason: parsed.reason })
+        return
+      }
+      const payload = parsed.value
+      const path = payload.path
+
+      const decision = decideInboundFileUpdate({
+        payload,
+        selfClientId: clientId,
+        currentRev: lastRemoteRevision.current.get(path) ?? 0,
+        currentContent: readPathContent(path),
+        emittedContent: lastEmittedContent.current.get(path),
+        isLocalDirty: isLocalDirty(path),
+      })
+
+      if (decision.action === 'skip') {
+        collabSyncLog('editor', 'remote-file-skip', {
+          reason: decision.reason,
+          path,
+          from: payload.from,
+          rev: payload.rev,
+        })
+        return
+      }
+
+      registerRemotePath(path)
+
+      if (decision.action === 'queue') {
+        collabSyncLog('editor', 'remote-file-skip', {
+          reason: decision.reason,
+          path,
+          from: payload.from,
+          rev: payload.rev,
+          local: collabSyncTextMeta(readPathContent(path)),
+          emitted: collabSyncTextMeta(
+            lastEmittedContent.current.get(path) ?? '',
+          ),
+        })
+        queuePendingRemote(path, decision.payload)
+        return
+      }
+
+      applyRemoteFileNow(path, decision.payload)
+    }
+
+    editorSyncOpsRef.current = { readPathContent, flushPendingRemote }
+
     const onConnect = () => {
+      collabSyncLog('socket', 'connect', { room, clientId })
       setSnapshotReady(false)
       lastRemoteRevision.current.clear()
+      lastEmittedContent.current.clear()
+      pendingRemoteFile.current.clear()
       lastPresence.current = {
         file: '',
         anchorLine: 0,
@@ -387,11 +561,20 @@ export function CollabSync({
     )
 
     socket.on('collab-snapshot', (payload: CollabSnapshotPayload) => {
+      collabSyncLog('snapshot', 'inbound', {
+        room,
+        fileCount: Object.keys(payload?.files ?? {}).length,
+        folderCount: Array.isArray(payload?.folders)
+          ? payload.folders.length
+          : 0,
+        prevSyncedPaths: sandpackSyncedPathsRef.current.length,
+      })
       skipOutbound.current = true
       debounceTimers.current.forEach((t) => clearTimeout(t))
       debounceTimers.current.clear()
-      lastLocalFsTouch.current.clear()
       lastRemoteRevision.current.clear()
+      lastEmittedContent.current.clear()
+      pendingRemoteFile.current.clear()
 
       const result = handleCollabSnapshot({
         payload,
@@ -412,103 +595,81 @@ export function CollabSync({
       setFolderPaths(nextFolders)
       skipOutbound.current = false
       setSnapshotReady(true)
+      for (const path of result.syncPaths) {
+        const code = readPathContent(path)
+        if (code.length > 0 || sandpackRef.current.files[path]) {
+          lastEmittedContent.current.set(path, code)
+        }
+      }
+      pendingRemoteFile.current.clear()
+      collabSyncLog('snapshot', 'applied', {
+        room,
+        skippedSandpackApply: result.skippedSandpackApply,
+        explorerPaths: result.explorerPaths.length,
+        syncPaths: result.syncPaths.length,
+      })
     })
 
-    socket.on(
-      'collab-file',
-      (p: { path: string; content: string; from: string; rev?: number }) => {
-        if (p.from === clientId) {
-          return
-        }
-        const path = normalizeSandpackFilePath(p.path)
-        if (!path) {
-          return
-        }
-        if (typeof p.rev === 'number' && Number.isFinite(p.rev)) {
-          const currentRev = lastRemoteRevision.current.get(path) ?? 0
-          const nextRev = Math.floor(p.rev)
-          if (nextRev <= currentRev) {
-            return
-          }
-          lastRemoteRevision.current.set(path, nextRev)
-        }
-        setFilePaths((prev) => {
-          const next = prev.includes(path)
-            ? prev
-            : [...prev, path].sort((a, b) => a.localeCompare(b))
-          filePathsRef.current = next
-          setFolderPaths((currentFolders) => {
-            const nextFolders = normalizeFolderList(next, currentFolders)
-            folderPathsRef.current = nextFolders
-            return nextFolders
-          })
-          return next
-        })
+    socket.on('collab-file', handleRemoteFile)
 
-        const cur = readSandpackFileCode(sandpackRef.current.files[path])
-        if (cur === p.content) {
-          return
-        }
-        if (
-          p.from !== clientId &&
-          isStaleShorterPrefix(path, p.content, cur, lastLocalFsTouch.current)
-        ) {
-          return
-        }
-        const touched = lastLocalFsTouch.current.get(path)
-        if (
-          p.from !== clientId &&
-          touched != null &&
-          Date.now() - touched < REMOTE_FILE_GUARD_MS
-        ) {
-          return
-        }
-        skipOutbound.current = true
-        sandpackRef.current.updateFile(path, p.content, true)
-        skipOutbound.current = false
-      },
-    )
-
-    socket.on(
-      'collab-remove',
-      (p: { path: string; from: string; rev?: number }) => {
-        if (p.from === clientId) {
-          return
-        }
-        const path = normalizeSandpackFilePath(p.path)
-        if (!path) {
-          return
-        }
-        if (typeof p.rev === 'number' && Number.isFinite(p.rev)) {
-          const currentRev = lastRemoteRevision.current.get(path) ?? 0
-          const nextRev = Math.floor(p.rev)
-          if (nextRev <= currentRev) {
-            return
-          }
-          lastRemoteRevision.current.set(path, nextRev)
-        }
-        const pending = debounceTimers.current.get(path)
-        if (pending) {
-          clearTimeout(pending)
-          debounceTimers.current.delete(path)
-        }
-        setFilePaths((prev) => {
-          const next = prev.filter((entry) => entry !== path)
-          filePathsRef.current = next
-          setFolderPaths((currentFolders) => {
-            const nextFolders = normalizeFolderList(next, currentFolders)
-            folderPathsRef.current = nextFolders
-            return nextFolders
-          })
-          return next
+    socket.on('collab-remove', (wire: RemoteRemoveWire) => {
+      const parsed = parseRemoteRemoveWire(wire)
+      if (!parsed.ok) {
+        collabSyncLog('editor', 'remote-remove-skip', {
+          reason: parsed.reason,
         })
-        skipOutbound.current = true
-        if (sandpackRef.current.files[path]) {
-          sandpackRef.current.deleteFile(path, true)
+        return
+      }
+      const { path, from, rev } = parsed.value
+      if (from === clientId) {
+        collabSyncLog('editor', 'remote-remove-skip', { reason: 'self-echo' })
+        return
+      }
+      if (rev !== undefined) {
+        const currentRev = lastRemoteRevision.current.get(path) ?? 0
+        if (rev <= currentRev) {
+          collabSyncLog('editor', 'remote-remove-skip', {
+            reason: 'stale-rev',
+            path,
+            rev,
+            currentRev,
+          })
+          return
         }
-        skipOutbound.current = false
-      },
-    )
+        lastRemoteRevision.current.set(path, rev)
+      }
+      if (!sandpackRef.current.files[path]) {
+        collabSyncLog('editor', 'remote-remove-skip', {
+          reason: 'unchanged',
+          path,
+        })
+        return
+      }
+      const pending = debounceTimers.current.get(path)
+      if (pending) {
+        clearTimeout(pending)
+        debounceTimers.current.delete(path)
+      }
+      setFilePaths((prev) => {
+        const next = prev.filter((entry) => entry !== path)
+        filePathsRef.current = next
+        setFolderPaths((currentFolders) => {
+          const nextFolders = normalizeFolderList(next, currentFolders)
+          folderPathsRef.current = nextFolders
+          return nextFolders
+        })
+        return next
+      })
+      inboundApplySuppressUntil.current.set(
+        path,
+        Date.now() + INBOUND_APPLY_SUPPRESS_MS,
+      )
+      skipOutbound.current = true
+      sandpackRef.current.deleteFile(path, false)
+      skipOutbound.current = false
+      lastEmittedContent.current.delete(path)
+      pendingRemoteFile.current.delete(path)
+    })
 
     socket.on('collab-folders', (folders: string[]) => {
       const nextFolders = normalizeFolderList(
@@ -537,6 +698,12 @@ export function CollabSync({
     }
     const unsub = listen((message) => {
       if (skipOutbound.current) {
+        if (isFsChange(message) || isFsRemove(message)) {
+          collabSyncLog('editor', 'local-fs-suppressed', {
+            type: (message as FsChange | FsRemove).type,
+            path: (message as FsChange | FsRemove).path,
+          })
+        }
         return
       }
       if (isFsChange(message)) {
@@ -544,22 +711,58 @@ export function CollabSync({
         if (!normalizedPath) {
           return
         }
-        const { content } = message
-        lastLocalFsTouch.current.set(normalizedPath, Date.now())
+        const suppressUntil =
+          inboundApplySuppressUntil.current.get(normalizedPath) ?? 0
+        if (Date.now() < suppressUntil) {
+          collabSyncLog('editor', 'local-fs-suppressed', {
+            reason: 'inbound-echo',
+            path: normalizedPath,
+          })
+          return
+        }
         const prev = debounceTimers.current.get(normalizedPath)
         if (prev) {
           clearTimeout(prev)
+          collabSyncLog('editor', 'local-file-debounce-reset', {
+            path: normalizedPath,
+          })
+        } else {
+          collabSyncLog('editor', 'local-file-debounce-start', {
+            path: normalizedPath,
+            debounceMs: COLLAB_FILE_DEBOUNCE_MS,
+          })
         }
         debounceTimers.current.set(
           normalizedPath,
           setTimeout(() => {
             debounceTimers.current.delete(normalizedPath)
-            socketRef.current?.emit('collab-file', {
-              room,
+            const content =
+              editorSyncOpsRef.current.readPathContent(normalizedPath)
+            const outbound = validateOutboundFile({
               path: normalizedPath,
               content,
-              from: clientId,
+              clientId,
             })
+            if (!outbound.ok) {
+              collabSyncLog('editor', 'local-file-skip', {
+                reason: outbound.reason,
+                path: normalizedPath,
+              })
+              return
+            }
+            lastEmittedContent.current.set(outbound.path, outbound.content)
+            collabSyncLog('editor', 'local-file-emit', {
+              path: outbound.path,
+              room,
+              ...collabSyncTextMeta(outbound.content),
+            })
+            socketRef.current?.emit('collab-file', {
+              room,
+              path: outbound.path,
+              content: outbound.content,
+              from: outbound.from,
+            })
+            editorSyncOpsRef.current.flushPendingRemote(outbound.path)
           }, COLLAB_FILE_DEBOUNCE_MS),
         )
       } else if (isFsRemove(message)) {
@@ -572,10 +775,21 @@ export function CollabSync({
           clearTimeout(pending)
           debounceTimers.current.delete(normalizedPath)
         }
+        const outboundRemove = validateOutboundRemove({
+          path: normalizedPath,
+          clientId,
+        })
+        if (!outboundRemove.ok) {
+          collabSyncLog('editor', 'local-remove-skip', {
+            reason: outboundRemove.reason,
+            path: normalizedPath,
+          })
+          return
+        }
         socketRef.current?.emit('collab-remove', {
           room,
-          path: normalizedPath,
-          from: clientId,
+          path: outboundRemove.path,
+          from: outboundRemove.from,
         })
       }
     })
@@ -586,6 +800,9 @@ export function CollabSync({
     if (sandpack.status !== 'running' || !snapshotReady) {
       return
     }
+    collabSyncLog('presence', 'reset-on-active-file', {
+      activeFile: normalizeSandpackFilePath(sandpack.activeFile ?? ''),
+    })
     lastPresence.current = {
       file: '',
       anchorLine: 0,
@@ -631,6 +848,14 @@ export function CollabSync({
         headLine,
         headCol,
       }
+      collabSyncLog('presence', 'emit', {
+        room,
+        file,
+        anchorLine,
+        anchorCol,
+        headLine,
+        headCol,
+      })
       socket.emit('collab-presence', {
         room,
         clientId,

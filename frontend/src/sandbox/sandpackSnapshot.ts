@@ -1,3 +1,7 @@
+import {
+  collabSyncLog,
+  collabSyncTextMeta,
+} from '../collab/collabSyncLog'
 import { normalizeSandpackFilePath } from '../collab/sandpackPaths'
 import { readSandpackFileCode } from './sandpackCode'
 import {
@@ -74,12 +78,18 @@ export function applySandpackSnapshot(
   const nextPaths = Object.keys(sandpackFiles)
   let touched = false
   let lastTouchedPath: string | undefined
+  const updatedPaths: string[] = []
 
   for (const [path, content] of Object.entries(sandpackFiles)) {
     if (readSandpackFileCode(sandpack.files[path]) !== content) {
+      collabSyncLog('snapshot', 'editor-update-file', {
+        path,
+        ...collabSyncTextMeta(content),
+      })
       sandpack.updateFile(path, content, false)
       touched = true
       lastTouchedPath = path
+      updatedPaths.push(path)
     }
   }
 
@@ -89,12 +99,15 @@ export function applySandpackSnapshot(
     sandpackFiles,
     layout.custom,
   )
+  const removedPaths: string[] = []
   for (let i = pathsToRemove.length - 1; i >= 0; i -= 1) {
     const path = pathsToRemove[i]
     if (sandpack.files[path]) {
+      collabSyncLog('snapshot', 'editor-delete-file', { path })
       sandpack.deleteFile(path, false)
       touched = true
       lastTouchedPath = path
+      removedPaths.push(path)
     }
   }
 
@@ -107,6 +120,14 @@ export function applySandpackSnapshot(
   }
 
   const isFirstSync = previousSyncedPaths.length === 0
+  collabSyncLog('snapshot', 'editor-apply-done', {
+    isFirstSync,
+    touched,
+    updatedPaths,
+    removedPaths,
+    nextPathCount: nextPaths.length,
+    bundlerStatus: sandpack.status,
+  })
   if (touched) {
     if (isBundlerActive(sandpack.status)) {
       triggerRecompile(sandpack, sandpackFiles, lastTouchedPath)
@@ -139,6 +160,10 @@ export function handleCollabSnapshot(args: {
   const isFirstSnapshot = args.previousSyncedPaths.length === 0
 
   if (isFirstSnapshot && args.requestProviderBoot?.(merged)) {
+    collabSyncLog('snapshot', 'provider-boot-deferred', {
+      custom: layout.custom,
+      syncFileCount: Object.keys(layout.syncFiles).length,
+    })
     return {
       merged,
       explorerPaths: layout.explorerPaths,
