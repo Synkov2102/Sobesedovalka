@@ -41,3 +41,16 @@ export function collabSyncLog(
     console.debug(PREFIX, scope, event)
   }
 }
+
+/** Всегда в консоль — для прод-диагностики WS (в dev дублирует debug). */
+export function collabSyncWarn(
+  scope: string,
+  event: string,
+  detail?: Record<string, unknown>,
+): void {
+  if (detail !== undefined) {
+    console.warn(PREFIX, scope, event, detail)
+  } else {
+    console.warn(PREFIX, scope, event)
+  }
+}

@@ -22,6 +22,7 @@ import {
   parseRemoteRemoveWire,
   validateOutboundFile,
   validateOutboundRemove,
+  type RemoteFilePayload,
   type RemoteFileWire,
   type RemoteRemoveWire,
 } from '../collab/collabFileGuard'
@@ -29,6 +30,7 @@ import { normalizeSandpackFilePath } from '../collab/sandpackPaths'
 import {
   collabSyncLog,
   collabSyncTextMeta,
+  collabSyncWarn,
 } from '../collab/collabSyncLog'
 import { readSandpackSelection } from '../collab/sandpackCursor'
 import { getAccessToken } from '../auth/tokenStorage'
@@ -44,10 +46,11 @@ import {
 import { readSandpackFileCode } from '../sandbox/sandpackCode'
 import { handleCollabSnapshot } from '../sandbox/sandpackSnapshot'
 
+/** На проде без VITE_* клиент ходит на тот же origin, что и страница (nginx → backend). */
 function collabWsUrl(): string {
   const raw = import.meta.env.VITE_COLLAB_WS_URL
-  if (typeof raw === 'string' && raw.length > 0) {
-    return raw
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    return raw.trim()
   }
   if (typeof window !== 'undefined' && window.location?.origin) {
     return window.location.origin
@@ -83,6 +86,8 @@ function isFsRemove(m: unknown): m is FsRemove {
 
 const REMOTE_FILE_GUARD_MS = 420
 const COLLAB_FILE_DEBOUNCE_MS = 320
+/** После snapshot Sandpack на проде дольше шумит fs/change — не считаем это вводом. */
+const COLLAB_OUTBOUND_GRACE_MS = 3000
 const PAGE_LEAVE_EVENT_COOLDOWN_MS = 5000
 
 /** Устаревший debounced snapshot пира — только если недавно печатали сами. */
@@ -189,6 +194,10 @@ export function CollabSync({
   const lastLocalFsTouch = useRef<Map<string, number>>(new Map())
   /** Реальный ввод с клавиатуры — guard/stale-prefix только для этих путей. */
   const userEditedPaths = useRef<Set<string>>(new Set())
+  const hasSnapshotRef = useRef(false)
+  const outboundGraceUntilRef = useRef(0)
+  const pendingRemoteApplyRef = useRef<Map<string, RemoteFilePayload>>(new Map())
+  const flushPendingRemoteApplyRef = useRef<() => void>(() => {})
   const onRosterRef = useRef(onRoster)
   const onWelcomeRef = useRef(onWelcome)
   const requestProviderBootRef = useRef(requestProviderBoot)
@@ -336,18 +345,68 @@ export function CollabSync({
   useEffect(() => {
     const debounceMap = debounceTimers.current
     let rosterRaf: number | null = null
-    const socket = io(collabWsUrl(), {
-      transports: ['websocket', 'polling'],
+    const wsUrl = collabWsUrl()
+    const socket = io(wsUrl, {
       path: '/socket.io',
+      /** polling первым — часть прод-прокси режет upgrade WebSocket. */
+      transports: ['polling', 'websocket'],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 800,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
       auth: (cb) => {
         cb({ token: getAccessToken() ?? '' })
       },
     })
     socketRef.current = socket
 
+    socket.on('connect_error', (err: Error) => {
+      collabSyncWarn('socket', 'connect_error', {
+        message: err.message,
+        wsUrl,
+      })
+    })
+    socket.on('disconnect', (reason: string) => {
+      collabSyncWarn('socket', 'disconnect', { reason, room })
+    })
+
+    const applyRemotePayload = (path: string, p: RemoteFilePayload) => {
+      if (sandpackRef.current.status !== 'running') {
+        pendingRemoteApplyRef.current.set(path, p)
+        collabSyncLog('editor', 'remote-file-defer', {
+          reason: 'sandpack-not-ready',
+          path,
+          from: p.from,
+        })
+        return
+      }
+      pendingRemoteApplyRef.current.delete(path)
+      skipOutbound.current = true
+      collabSyncLog('editor', 'remote-file-apply', {
+        path,
+        from: p.from,
+        rev: p.rev,
+        ...collabSyncTextMeta(p.content),
+      })
+      sandpackRef.current.updateFile(path, p.content, true)
+      skipOutbound.current = false
+    }
+
+    flushPendingRemoteApplyRef.current = () => {
+      if (pendingRemoteApplyRef.current.size === 0) {
+        return
+      }
+      for (const [path, p] of [...pendingRemoteApplyRef.current.entries()]) {
+        applyRemotePayload(path, p)
+      }
+    }
+
     const onConnect = () => {
-      collabSyncLog('socket', 'connect', { room, clientId })
-      setSnapshotReady(false)
+      collabSyncLog('socket', 'connect', { room, clientId, wsUrl })
+      if (!hasSnapshotRef.current) {
+        setSnapshotReady(false)
+      }
       lastRemoteRevision.current.clear()
       lastLocalFsTouch.current.clear()
       userEditedPaths.current.clear()
@@ -467,7 +526,10 @@ export function CollabSync({
       setFilePaths(result.explorerPaths)
       setFolderPaths(nextFolders)
       skipOutbound.current = false
+      hasSnapshotRef.current = true
+      outboundGraceUntilRef.current = Date.now() + COLLAB_OUTBOUND_GRACE_MS
       setSnapshotReady(true)
+      queueMicrotask(() => flushPendingRemoteApplyRef.current())
       collabSyncLog('snapshot', 'applied', {
         room,
         skippedSandpackApply: result.skippedSandpackApply,
@@ -544,15 +606,7 @@ export function CollabSync({
         })
         return
       }
-      skipOutbound.current = true
-      collabSyncLog('editor', 'remote-file-apply', {
-        path,
-        from: p.from,
-        rev: p.rev,
-        ...collabSyncTextMeta(p.content),
-      })
-      sandpackRef.current.updateFile(path, p.content, true)
-      skipOutbound.current = false
+      applyRemotePayload(path, p)
     })
 
     socket.on('collab-remove', (wire: RemoteRemoveWire) => {
@@ -650,6 +704,13 @@ export function CollabSync({
         if (!normalizedPath) {
           return
         }
+        if (Date.now() < outboundGraceUntilRef.current) {
+          collabSyncLog('editor', 'local-fs-suppressed', {
+            reason: 'outbound-grace',
+            path: normalizedPath,
+          })
+          return
+        }
         userEditedPaths.current.add(normalizedPath)
         lastLocalFsTouch.current.set(normalizedPath, Date.now())
         const prev = debounceTimers.current.get(normalizedPath)
@@ -729,6 +790,19 @@ export function CollabSync({
     })
     return unsub
   }, [listen, room, clientId, sandpack.status])
+
+  useEffect(() => {
+    if (sandpack.status === 'running') {
+      flushPendingRemoteApplyRef.current()
+    }
+  }, [sandpack.status])
+
+  useEffect(() => {
+    hasSnapshotRef.current = false
+    outboundGraceUntilRef.current = 0
+    pendingRemoteApplyRef.current.clear()
+    setSnapshotReady(false)
+  }, [room])
 
   useEffect(() => {
     if (sandpack.status !== 'running' || !snapshotReady) {
