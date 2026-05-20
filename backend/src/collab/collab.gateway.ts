@@ -9,6 +9,7 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import * as Y from 'yjs';
 import {
   hueFromClientId,
   normHue,
@@ -36,6 +37,12 @@ import type { RoomPeer } from './collab.types';
 type CollabSnapshot = {
   files: Record<string, string>;
   folders: string[];
+};
+
+type CollabYjsUpdateWire = {
+  room?: string;
+  clientId?: string;
+  update?: unknown;
 };
 
 function normalizeFolderPath(path: string): string {
@@ -79,6 +86,13 @@ function deriveFolderPaths(
   return Array.from(out).sort((a, b) => a.localeCompare(b));
 }
 
+const Y_FILES_MAP = 'files';
+const Y_FOLDERS_ARRAY = 'folders';
+
+function yTextName(path: string): string {
+  return `file:${path}`;
+}
+
 /** Collab files + roster: MongoDB only (see `MONGODB_URI`). */
 @WebSocketGateway({
   cors: {
@@ -115,9 +129,15 @@ export class CollabGateway implements OnGatewayDisconnect {
     string,
     ReturnType<typeof setTimeout>
   >();
+  private readonly roomYDocs = new Map<string, Y.Doc>();
+  private readonly yjsPersistTimers = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
 
   private static readonly PRESENCE_ROSTER_THROTTLE_MS = 80;
   private static readonly FILE_PERSIST_DEBOUNCE_MS = 750;
+  private static readonly YJS_PERSIST_DEBOUNCE_MS = 750;
 
   /** Same logical client can have several sockets (reconnect, React StrictMode). */
   private socketCountForClient(room: string, clientId: string): number {
@@ -147,6 +167,8 @@ export class CollabGateway implements OnGatewayDisconnect {
         this.roomPeers.delete(room);
         this.lastRosterPayload.delete(room);
         this.roomFileRevisions.delete(room);
+        this.roomYDocs.get(room)?.destroy();
+        this.roomYDocs.delete(room);
       }
     }
 
@@ -225,6 +247,19 @@ export class CollabGateway implements OnGatewayDisconnect {
       folderCount: snap.folders.length,
     });
     client.emit('collab-snapshot', snap);
+    const yjsState = Y.encodeStateAsUpdate(this.ensureRoomYDoc(room));
+    this.syncLog('join-yjs-sync', {
+      room,
+      clientId,
+      updateBytes: yjsState.length,
+      fileCount:
+        this.roomYDocs.get(room)?.getMap<boolean>(Y_FILES_MAP).size ?? 0,
+      folderCount:
+        this.roomYDocs.get(room)?.getArray<string>(Y_FOLDERS_ARRAY).length ?? 0,
+    });
+    client.emit('collab-yjs-sync', {
+      update: Array.from(yjsState),
+    });
     this.broadcastRoster(room);
   }
 
@@ -302,9 +337,7 @@ export class CollabGateway implements OnGatewayDisconnect {
 
     const now = Date.now();
     const lastRoster = this.lastPresenceRosterAt.get(room) ?? 0;
-    if (
-      now - lastRoster >= CollabGateway.PRESENCE_ROSTER_THROTTLE_MS
-    ) {
+    if (now - lastRoster >= CollabGateway.PRESENCE_ROSTER_THROTTLE_MS) {
       this.lastPresenceRosterAt.set(room, now);
       this.broadcastRoster(room);
     }
@@ -404,6 +437,49 @@ export class CollabGateway implements OnGatewayDisconnect {
         displayName: peer?.displayName ?? clientId,
       })
       .catch((e: unknown) => this.logger.warn(String(e)));
+  }
+
+  @SubscribeMessage('collab-yjs-update')
+  handleYjsUpdate(
+    @MessageBody() body: CollabYjsUpdateWire,
+    @ConnectedSocket() client: Socket,
+  ): void {
+    const room = typeof body?.room === 'string' ? body.room : '';
+    const clientId =
+      typeof body?.clientId === 'string' ? body.clientId.trim() : '';
+    if (
+      !room ||
+      !clientId ||
+      !this.assertSocketSender(client, room, clientId)
+    ) {
+      return;
+    }
+
+    const update = this.normalizeYjsUpdate(body.update);
+    if (!update) {
+      this.syncLog('yjs-update-reject', { reason: 'invalid-update', room });
+      return;
+    }
+
+    const doc = this.ensureRoomYDoc(room);
+    const beforeFileCount = doc.getMap<boolean>(Y_FILES_MAP).size;
+    this.syncLog('yjs-update-receive', {
+      room,
+      clientId,
+      socketId: client.id,
+      updateBytes: update.length,
+      beforeFileCount,
+    });
+    Y.applyUpdate(doc, update);
+    this.syncYDocToMemory(room, doc);
+    this.scheduleYjsPersist(room);
+    this.syncLog('yjs-update-broadcast', {
+      room,
+      clientId,
+      updateBytes: update.length,
+      peerCount: Math.max(0, (this.roomPeers.get(room)?.size ?? 1) - 1),
+    });
+    client.to(room).emit('collab-yjs-update', { update: Array.from(update) });
   }
 
   @SubscribeMessage('collab-file')
@@ -554,6 +630,142 @@ export class CollabGateway implements OnGatewayDisconnect {
       return false;
     }
     return true;
+  }
+
+  private ensureRoomYDoc(room: string): Y.Doc {
+    const existing = this.roomYDocs.get(room);
+    if (existing) {
+      this.syncLog('yjs-doc-existing', {
+        room,
+        fileCount: existing.getMap<boolean>(Y_FILES_MAP).size,
+        folderCount: existing.getArray<string>(Y_FOLDERS_ARRAY).length,
+      });
+      return existing;
+    }
+
+    const doc = new Y.Doc();
+    const files = this.snapshotFiles(room);
+    const folders = this.snapshotFolders(room);
+    this.syncLog('yjs-doc-create', {
+      room,
+      seedFileCount: Object.keys(files).length,
+      seedFolderCount: folders.length,
+    });
+    doc.transact(() => {
+      const filesMap = doc.getMap<boolean>(Y_FILES_MAP);
+      for (const [path, content] of Object.entries(files)) {
+        const normalized = normalizeSandpackFilePath(path);
+        filesMap.set(normalized, true);
+        const text = doc.getText(yTextName(normalized));
+        if (text.length > 0) {
+          text.delete(0, text.length);
+        }
+        text.insert(0, content);
+      }
+      const foldersArray = doc.getArray<string>(Y_FOLDERS_ARRAY);
+      foldersArray.delete(0, foldersArray.length);
+      if (folders.length > 0) {
+        foldersArray.push(folders);
+      }
+    });
+    this.roomYDocs.set(room, doc);
+    this.syncLog('yjs-doc-created', {
+      room,
+      encodedBytes: Y.encodeStateAsUpdate(doc).length,
+      fileCount: doc.getMap<boolean>(Y_FILES_MAP).size,
+      folderCount: doc.getArray<string>(Y_FOLDERS_ARRAY).length,
+    });
+    return doc;
+  }
+
+  private syncYDocToMemory(room: string, doc: Y.Doc): void {
+    const filesMap = doc.getMap<boolean>(Y_FILES_MAP);
+    const files = new Map<string, string>();
+    for (const path of filesMap.keys()) {
+      files.set(path, doc.getText(yTextName(path)).toJSON());
+    }
+    this.roomFiles.set(room, files);
+    const folders = doc.getArray<string>(Y_FOLDERS_ARRAY).toArray();
+    const normalizedFolders = deriveFolderPaths(
+      Object.fromEntries(files),
+      folders,
+    );
+    this.roomFolders.set(room, new Set(normalizedFolders));
+    this.syncLog('yjs-materialize-memory', {
+      room,
+      fileCount: files.size,
+      folderCount: normalizedFolders.length,
+      encodedBytes: Y.encodeStateAsUpdate(doc).length,
+    });
+  }
+
+  private scheduleYjsPersist(room: string): void {
+    const prev = this.yjsPersistTimers.get(room);
+    if (prev) {
+      clearTimeout(prev);
+      this.syncLog('yjs-persist-reschedule', { room });
+    } else {
+      this.syncLog('yjs-persist-schedule', { room });
+    }
+    this.yjsPersistTimers.set(
+      room,
+      setTimeout(() => {
+        this.yjsPersistTimers.delete(room);
+        const doc = this.roomYDocs.get(room);
+        if (!doc) {
+          this.syncLog('yjs-persist-skip', { room, reason: 'missing-doc' });
+          return;
+        }
+        this.syncYDocToMemory(room, doc);
+        const files = this.snapshotFiles(room);
+        const folders = this.snapshotFolders(room);
+        this.syncLog('yjs-persist-flush', {
+          room,
+          fileCount: Object.keys(files).length,
+          folderCount: folders.length,
+        });
+        void this.mongoRepo
+          .replaceRoomFiles(room, files)
+          .then(() =>
+            this.syncLog('yjs-persist-files-ok', {
+              room,
+              fileCount: Object.keys(files).length,
+            }),
+          )
+          .catch((e: unknown) => {
+            this.syncLog('yjs-persist-files-error', {
+              room,
+              message: String(e),
+            });
+            this.logger.warn(String(e));
+          });
+        void this.mongoRepo
+          .replaceRoomFolders(room, folders)
+          .then(() =>
+            this.syncLog('yjs-persist-folders-ok', {
+              room,
+              folderCount: folders.length,
+            }),
+          )
+          .catch((e: unknown) => {
+            this.syncLog('yjs-persist-folders-error', {
+              room,
+              message: String(e),
+            });
+            this.logger.warn(String(e));
+          });
+      }, CollabGateway.YJS_PERSIST_DEBOUNCE_MS),
+    );
+  }
+
+  private normalizeYjsUpdate(raw: unknown): Uint8Array | null {
+    if (raw instanceof Uint8Array) {
+      return raw;
+    }
+    if (Array.isArray(raw) && raw.every((n) => Number.isInteger(n))) {
+      return Uint8Array.from(raw);
+    }
+    return null;
   }
 
   @SubscribeMessage('collab-folders-sync')

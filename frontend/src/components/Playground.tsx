@@ -32,6 +32,7 @@ import {
   typescriptAdditionalLanguages,
   typescriptCodeEditorExtensions,
 } from './codeEditorExtensions'
+import { sandpackYjsBindingExtension } from '../collab/sandpackYjsBinding'
 import './Playground.css'
 
 type PlaygroundProps = {
@@ -123,7 +124,11 @@ function PasteTrackingCodeEditor() {
   })
 
   const editorExtensions = useMemo(
-    () => [...typescriptCodeEditorExtensions, codeEditorPasteExtension],
+    () => [
+      ...typescriptCodeEditorExtensions,
+      codeEditorPasteExtension,
+      sandpackYjsBindingExtension,
+    ],
     [],
   )
 

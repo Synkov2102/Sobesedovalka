@@ -9,6 +9,7 @@ import {
 } from 'react'
 import { useSandpack } from '@codesandbox/sandpack-react'
 import { io, type Socket } from 'socket.io-client'
+import * as Y from 'yjs'
 import type {
   CollabPeerDTO,
   CollabWelcomePayload,
@@ -17,21 +18,23 @@ import {
   normalizePeerColorHexWire,
   normalizePeerHueWire,
 } from '../collab/peerColor'
-import {
-  parseRemoteFileWire,
-  parseRemoteRemoveWire,
-  validateOutboundFile,
-  validateOutboundRemove,
-  type RemoteFilePayload,
-  type RemoteFileWire,
-  type RemoteRemoveWire,
-} from '../collab/collabFileGuard'
 import { normalizeSandpackFilePath } from '../collab/sandpackPaths'
+import {
+  getYFileText,
+  getYFilesMap,
+  getYFoldersArray,
+  readYjsFiles,
+  readYjsFolders,
+  replaceYArray,
+  replaceYText,
+  syncYTextToContent,
+} from '../collab/collabYjsModel'
 import {
   collabSyncLog,
   collabSyncTextMeta,
   collabSyncWarn,
 } from '../collab/collabSyncLog'
+import { createYjsSocketProvider } from '../collab/yjsCollabProvider'
 import { readSandpackSelection } from '../collab/sandpackCursor'
 import { getAccessToken } from '../auth/tokenStorage'
 import { CollabFsContext } from './collabFsContext'
@@ -45,8 +48,22 @@ import {
 } from './PlaygroundFileExplorer/utils/paths'
 import { readSandpackFileCode } from '../sandbox/sandpackCode'
 import { handleCollabSnapshot } from '../sandbox/sandpackSnapshot'
+import { setSandpackYjsBindingProvider } from '../collab/sandpackYjsBinding'
 
-/** На проде без VITE_* клиент ходит на тот же origin, что и страница (nginx → backend). */
+type FsChange = { type: 'fs/change'; path: string; content: string }
+type FsRemove = { type: 'fs/remove'; path: string }
+type CollabSnapshotPayload = {
+  files?: Record<string, string>
+  folders?: string[]
+}
+
+const PAGE_LEAVE_EVENT_COOLDOWN_MS = 5000
+const SANDPACK_APPLY_SUPPRESS_MS = 250
+const EDITOR_FS_CHANGE_IGNORE_MS = 2000
+const YJS_ORIGIN_EDITOR = 'editor'
+const YJS_ORIGIN_FILE_TREE = 'file-tree'
+const YJS_ORIGIN_SANDPACK_FS = 'sandpack-fs'
+
 function collabWsUrl(): string {
   const raw = import.meta.env.VITE_COLLAB_WS_URL
   if (typeof raw === 'string' && raw.trim().length > 0) {
@@ -56,13 +73,6 @@ function collabWsUrl(): string {
     return window.location.origin
   }
   return 'http://localhost:3000'
-}
-
-type FsChange = { type: 'fs/change'; path: string; content: string }
-type FsRemove = { type: 'fs/remove'; path: string }
-type CollabSnapshotPayload = {
-  files?: Record<string, string>
-  folders?: string[]
 }
 
 function isFsChange(m: unknown): m is FsChange {
@@ -82,29 +92,6 @@ function isFsRemove(m: unknown): m is FsRemove {
     (m as FsRemove).type === 'fs/remove' &&
     typeof (m as FsRemove).path === 'string'
   )
-}
-
-const REMOTE_FILE_GUARD_MS = 420
-const COLLAB_FILE_DEBOUNCE_MS = 320
-/** После snapshot Sandpack на проде дольше шумит fs/change — не считаем это вводом. */
-const COLLAB_OUTBOUND_GRACE_MS = 3000
-const PAGE_LEAVE_EVENT_COOLDOWN_MS = 5000
-
-/** Устаревший debounced snapshot пира — только если недавно печатали сами. */
-function isStaleShorterPrefix(
-  path: string,
-  incoming: string,
-  cur: string | undefined,
-  lastLocalFsTouch: Map<string, number>,
-): boolean {
-  if (cur == null || cur.length <= incoming.length) {
-    return false
-  }
-  if (!cur.startsWith(incoming)) {
-    return false
-  }
-  const t = lastLocalFsTouch.get(path)
-  return t != null && Date.now() - t < REMOTE_FILE_GUARD_MS * 2
 }
 
 function normalizeFolderList(
@@ -165,7 +152,6 @@ export function CollabSync({
   clientId: string
   onRoster?: (peers: CollabPeerDTO[], count: number) => void
   onWelcome?: (welcome: CollabWelcomePayload) => void
-  /** Первый snapshot с кастомным пресетом — remount `SandpackProvider` в Playground. */
   requestProviderBoot?: (merged: Record<string, string>) => boolean
   children?: ReactNode
 }) {
@@ -174,15 +160,18 @@ export function CollabSync({
   const [filePaths, setFilePaths] = useState<string[]>([])
   const [folderPaths, setFolderPaths] = useState<string[]>([])
   const socketRef = useRef<Socket | null>(null)
+  const ydocRef = useRef<Y.Doc | null>(null)
+  const yjsSyncedRef = useRef(false)
   const skipOutbound = useRef(false)
-  const debounceTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
-    new Map(),
-  )
+  const suppressSandpackUntil = useRef<Map<string, number>>(new Map())
+  const recentEditorChangeUntil = useRef<Map<string, number>>(new Map())
   const sandpackRef = useRef(sandpack)
   const filePathsRef = useRef<string[]>([])
   const folderPathsRef = useRef<string[]>([])
-  /** Пути, реально переданные в Sandpack при последнем snapshot (≠ полный merged из Mongo). */
   const sandpackSyncedPathsRef = useRef<string[]>([])
+  const onRosterRef = useRef(onRoster)
+  const onWelcomeRef = useRef(onWelcome)
+  const requestProviderBootRef = useRef(requestProviderBoot)
   const lastPresence = useRef({
     file: '',
     anchorLine: 0,
@@ -190,17 +179,7 @@ export function CollabSync({
     headLine: 0,
     headCol: 0,
   })
-  const lastRemoteRevision = useRef<Map<string, number>>(new Map())
-  const lastLocalFsTouch = useRef<Map<string, number>>(new Map())
-  /** Реальный ввод с клавиатуры — guard/stale-prefix только для этих путей. */
-  const userEditedPaths = useRef<Set<string>>(new Set())
-  const hasSnapshotRef = useRef(false)
-  const outboundGraceUntilRef = useRef(0)
-  const pendingRemoteApplyRef = useRef<Map<string, RemoteFilePayload>>(new Map())
-  const flushPendingRemoteApplyRef = useRef<() => void>(() => {})
-  const onRosterRef = useRef(onRoster)
-  const onWelcomeRef = useRef(onWelcome)
-  const requestProviderBootRef = useRef(requestProviderBoot)
+
   useLayoutEffect(() => {
     sandpackRef.current = sandpack
     onRosterRef.current = onRoster
@@ -213,73 +192,267 @@ export function CollabSync({
     folderPathsRef.current = folderPaths
   }, [filePaths, folderPaths])
 
+  useLayoutEffect(() => {
+    collabSyncLog('yjs-binding', 'register-active-provider', { room, clientId })
+    setSandpackYjsBindingProvider(() => {
+      const doc = ydocRef.current
+      const path = normalizeSandpackFilePath(
+        sandpackRef.current.activeFile ?? '',
+      )
+      if (!doc || !path) {
+        collabSyncLog('yjs-binding', 'provider-empty', {
+          hasDoc: Boolean(doc),
+          activeFile: sandpackRef.current.activeFile ?? '',
+        })
+        return null
+      }
+      return {
+        path,
+        yText: getYFileText(doc, path),
+        transact: (apply) => {
+          doc.transact(apply, YJS_ORIGIN_EDITOR)
+        },
+        shouldIgnore: () => {
+          const suppressUntil = suppressSandpackUntil.current.get(path) ?? 0
+          const ignored =
+            !yjsSyncedRef.current ||
+            skipOutbound.current ||
+            Date.now() < suppressUntil
+          if (ignored) {
+            collabSyncLog('yjs-binding', 'ignore-editor-update', {
+              path,
+              yjsSynced: yjsSyncedRef.current,
+              skipOutbound: skipOutbound.current,
+              suppressMsLeft: Math.max(0, suppressUntil - Date.now()),
+            })
+          }
+          return ignored
+        },
+        onLocalChange: ({ insertedChars, deletedChars, changeCount }) => {
+          recentEditorChangeUntil.current.set(
+            path,
+            Date.now() + EDITOR_FS_CHANGE_IGNORE_MS,
+          )
+          collabSyncLog('yjs-binding', 'mark-recent-editor-change', {
+            path,
+            insertedChars,
+            deletedChars,
+            changeCount,
+            ignoreMs: EDITOR_FS_CHANGE_IGNORE_MS,
+          })
+        },
+      }
+    })
+    return () => {
+      collabSyncLog('yjs-binding', 'unregister-active-provider', {
+        room,
+        clientId,
+      })
+      setSandpackYjsBindingProvider(null)
+    }
+  }, [clientId, room])
+
+  const refreshFromYDoc = useCallback(() => {
+    const doc = ydocRef.current
+    if (!doc) {
+      return
+    }
+    const files = readYjsFiles(doc)
+    const nextFilePaths = sortPaths(Object.keys(files))
+    const nextFolders = normalizeFolderList(nextFilePaths, readYjsFolders(doc))
+    collabSyncLog('yjs-model', 'refresh-from-doc', {
+      fileCount: nextFilePaths.length,
+      folderCount: nextFolders.length,
+      activeFile: sandpackRef.current.activeFile ?? '',
+    })
+    filePathsRef.current = nextFilePaths
+    folderPathsRef.current = nextFolders
+    setFilePaths(nextFilePaths)
+    setFolderPaths(nextFolders)
+  }, [])
+
+  const applyYDocToSandpack = useCallback(() => {
+    const doc = ydocRef.current
+    if (!doc || sandpackRef.current.status !== 'running') {
+      collabSyncLog('sandpack-apply', 'skip-not-ready', {
+        hasDoc: Boolean(doc),
+        status: sandpackRef.current.status,
+      })
+      return
+    }
+    const files = readYjsFiles(doc)
+    const nextPaths = sortPaths(Object.keys(files))
+    let touchedPath: string | null = null
+
+    skipOutbound.current = true
+    collabSyncLog('sandpack-apply', 'start', {
+      fileCount: nextPaths.length,
+      previousSyncedCount: sandpackSyncedPathsRef.current.length,
+      activeFile: sandpackRef.current.activeFile ?? '',
+    })
+    for (const [path, content] of Object.entries(files)) {
+      const currentContent = readSandpackFileCode(
+        sandpackRef.current.files[path],
+      )
+      if (currentContent !== content) {
+        collabSyncLog('sandpack-apply', 'update-file', {
+          path,
+          currentLen: currentContent?.length ?? 0,
+          nextLen: content.length,
+        })
+        suppressSandpackUntil.current.set(
+          path,
+          Date.now() + SANDPACK_APPLY_SUPPRESS_MS,
+        )
+        sandpackRef.current.updateFile(path, content, false)
+        touchedPath = path
+      }
+    }
+
+    for (const previous of sandpackSyncedPathsRef.current) {
+      if (!files[previous] && sandpackRef.current.files[previous]) {
+        collabSyncLog('sandpack-apply', 'delete-file', { path: previous })
+        suppressSandpackUntil.current.set(
+          previous,
+          Date.now() + SANDPACK_APPLY_SUPPRESS_MS,
+        )
+        sandpackRef.current.deleteFile(previous, false)
+        touchedPath = previous
+      }
+    }
+    sandpackSyncedPathsRef.current = nextPaths
+
+    const active = normalizeSandpackFilePath(
+      sandpackRef.current.activeFile ?? '',
+    )
+    if (nextPaths.length > 0 && !files[active]) {
+      collabSyncLog('sandpack-apply', 'open-first-file', {
+        previousActive: active,
+        nextActive: nextPaths[0],
+      })
+      sandpackRef.current.openFile(nextPaths[0])
+    }
+    skipOutbound.current = false
+
+    if (touchedPath) {
+      const recompilePath = files[touchedPath] ? touchedPath : nextPaths[0]
+      if (recompilePath && files[recompilePath] !== undefined) {
+        collabSyncLog('sandpack-apply', 'trigger-recompile-file', {
+          path: recompilePath,
+        })
+        sandpackRef.current.updateFile(
+          recompilePath,
+          files[recompilePath],
+          true,
+        )
+      } else {
+        collabSyncLog('sandpack-apply', 'trigger-run-sandpack')
+        void sandpackRef.current.runSandpack()
+      }
+    }
+    collabSyncLog('sandpack-apply', 'done', {
+      touched: Boolean(touchedPath),
+      touchedPath,
+      syncedCount: nextPaths.length,
+    })
+    refreshFromYDoc()
+  }, [refreshFromYDoc])
+
   const syncFolders = useCallback(
     (folders: string[], nextFilePaths?: string[]) => {
+      const doc = ydocRef.current
+      if (!doc) {
+        return
+      }
       const baseFiles = nextFilePaths ?? filePathsRef.current
       const nextFolders = normalizeFolderList(baseFiles, folders)
+      doc.transact(() => {
+        replaceYArray(getYFoldersArray(doc), nextFolders)
+      }, YJS_ORIGIN_FILE_TREE)
+      collabSyncLog('file-tree', 'sync-folders', {
+        requestedCount: folders.length,
+        nextCount: nextFolders.length,
+        fileCount: baseFiles.length,
+      })
       folderPathsRef.current = nextFolders
       setFolderPaths(nextFolders)
-      socketRef.current?.emit('collab-folders-sync', {
-        room,
-        folders: nextFolders,
-      })
     },
-    [room],
+    [],
   )
 
   const saveFile = useCallback(
     (path: string, content: string) => {
       const normalizedPath = normalizeSandpackFilePath(path)
-      if (!normalizedPath) {
+      const doc = ydocRef.current
+      if (!normalizedPath || !doc) {
         return
       }
-
+      if (!yjsSyncedRef.current) {
+        collabSyncWarn('editor', 'skip-save-before-yjs-sync', {
+          path: normalizedPath,
+          ...collabSyncTextMeta(content),
+        })
+        return
+      }
+      doc.transact(() => {
+        getYFilesMap(doc).set(normalizedPath, true)
+        replaceYText(getYFileText(doc, normalizedPath), content)
+      }, YJS_ORIGIN_FILE_TREE)
       const nextFilePaths = sortPaths([...filePathsRef.current, normalizedPath])
       filePathsRef.current = nextFilePaths
       setFilePaths(nextFilePaths)
-
-      const nextFolders = normalizeFolderList(
-        nextFilePaths,
-        folderPathsRef.current,
-      )
-      folderPathsRef.current = nextFolders
-      setFolderPaths(nextFolders)
-
-      userEditedPaths.current.add(normalizedPath)
-      lastLocalFsTouch.current.set(normalizedPath, Date.now())
-      const outbound = validateOutboundFile({
+      syncFolders(folderPathsRef.current, nextFilePaths)
+      collabSyncLog('editor', 'save-file-yjs', {
         path: normalizedPath,
-        content,
-        clientId,
+        ...collabSyncTextMeta(content),
       })
-      if (!outbound.ok) {
-        collabSyncLog('editor', 'local-file-skip', {
-          reason: outbound.reason,
+    },
+    [syncFolders],
+  )
+
+  const removeFile = useCallback(
+    (path: string) => {
+      const normalizedPath = normalizeSandpackFilePath(path)
+      const doc = ydocRef.current
+      if (!normalizedPath || !doc) {
+        return
+      }
+      if (!yjsSyncedRef.current) {
+        collabSyncWarn('file-tree', 'skip-remove-before-yjs-sync', {
           path: normalizedPath,
         })
         return
       }
-      collabSyncLog('editor', 'save-file-emit', {
-        path: outbound.path,
-        room,
-        ...collabSyncTextMeta(outbound.content),
-      })
-      socketRef.current?.emit('collab-file', {
-        room,
-        path: outbound.path,
-        content: outbound.content,
-        from: outbound.from,
-      })
+      doc.transact(() => {
+        getYFilesMap(doc).delete(normalizedPath)
+      }, YJS_ORIGIN_FILE_TREE)
+      collabSyncLog('file-tree', 'remove-file-yjs', { path: normalizedPath })
+      const nextFilePaths = filePathsRef.current.filter(
+        (entry) => entry !== normalizedPath,
+      )
+      filePathsRef.current = nextFilePaths
+      setFilePaths(nextFilePaths)
+      syncFolders(folderPathsRef.current, nextFilePaths)
     },
-    [clientId, room],
+    [syncFolders],
   )
 
   const recordPaste = useCallback(
     (event: CollabPasteEventInput) => {
       const normalizedPath = normalizeSandpackFilePath(event.path)
       if (!normalizedPath || !event.content) {
+        collabSyncLog('paste', 'skip-invalid-paste', {
+          path: event.path,
+          contentLen: event.content?.length ?? 0,
+        })
         return
       }
+      collabSyncLog('paste', 'emit-paste', {
+        path: normalizedPath,
+        contentLen: event.content.length,
+        line: event.line,
+        col: event.col,
+      })
       socketRef.current?.emit('collab-paste', {
         room,
         clientId,
@@ -295,60 +468,13 @@ export function CollabSync({
     [clientId, room],
   )
 
-  const removeFile = useCallback(
-    (path: string) => {
-      const normalizedPath = normalizeSandpackFilePath(path)
-      if (!normalizedPath) {
-        return
-      }
-      const pending = debounceTimers.current.get(normalizedPath)
-      if (pending) {
-        clearTimeout(pending)
-        debounceTimers.current.delete(normalizedPath)
-      }
-
-      const nextFilePaths = filePathsRef.current.filter(
-        (entry) => entry !== normalizedPath,
-      )
-      filePathsRef.current = nextFilePaths
-      setFilePaths(nextFilePaths)
-
-      const nextFolders = normalizeFolderList(
-        nextFilePaths,
-        folderPathsRef.current,
-      )
-      folderPathsRef.current = nextFolders
-      setFolderPaths(nextFolders)
-
-      const outbound = validateOutboundRemove({
-        path: normalizedPath,
-        clientId,
-      })
-      if (!outbound.ok) {
-        collabSyncLog('editor', 'local-remove-skip', {
-          reason: outbound.reason,
-          path: normalizedPath,
-        })
-        return
-      }
-      userEditedPaths.current.delete(outbound.path)
-      lastLocalFsTouch.current.delete(outbound.path)
-      socketRef.current?.emit('collab-remove', {
-        room,
-        path: outbound.path,
-        from: outbound.from,
-      })
-    },
-    [clientId, room],
-  )
-
   useEffect(() => {
-    const debounceMap = debounceTimers.current
+    const doc = new Y.Doc()
+    ydocRef.current = doc
     let rosterRaf: number | null = null
     const wsUrl = collabWsUrl()
     const socket = io(wsUrl, {
       path: '/socket.io',
-      /** polling первым — часть прод-прокси режет upgrade WebSocket. */
       transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionAttempts: Infinity,
@@ -361,6 +487,53 @@ export function CollabSync({
     })
     socketRef.current = socket
 
+    const destroyProvider = createYjsSocketProvider({
+      doc,
+      socket,
+      room,
+      clientId,
+      canEmitUpdate: () => yjsSyncedRef.current && socket.connected,
+      onSynced: () => {
+        collabSyncLog('yjs-provider', 'on-synced-callback', {
+          room,
+          clientId,
+        })
+        yjsSyncedRef.current = true
+        setSnapshotReady(true)
+        refreshFromYDoc()
+        applyYDocToSandpack()
+      },
+    })
+
+    const onDocUpdate = (_update: Uint8Array, origin: unknown) => {
+      const originName = typeof origin === 'string' ? origin : typeof origin
+      collabSyncLog('yjs-model', 'doc-update-observed', {
+        room,
+        clientId,
+        origin: originName,
+      })
+      refreshFromYDoc()
+      if (
+        origin === YJS_ORIGIN_EDITOR ||
+        origin === YJS_ORIGIN_SANDPACK_FS ||
+        origin === YJS_ORIGIN_FILE_TREE
+      ) {
+        collabSyncLog('sandpack-apply', 'skip-local-origin', {
+          origin: originName,
+        })
+        return
+      }
+      applyYDocToSandpack()
+    }
+    doc.on('update', onDocUpdate)
+
+    const onConnect = () => {
+      collabSyncLog('socket', 'connect', { room, clientId, wsUrl })
+      yjsSyncedRef.current = false
+      setSnapshotReady(false)
+      socket.emit('collab-join', { room, clientId })
+    }
+    socket.on('connect', onConnect)
     socket.on('connect_error', (err: Error) => {
       collabSyncWarn('socket', 'connect_error', {
         message: err.message,
@@ -368,58 +541,9 @@ export function CollabSync({
       })
     })
     socket.on('disconnect', (reason: string) => {
+      yjsSyncedRef.current = false
       collabSyncWarn('socket', 'disconnect', { reason, room })
     })
-
-    const applyRemotePayload = (path: string, p: RemoteFilePayload) => {
-      if (sandpackRef.current.status !== 'running') {
-        pendingRemoteApplyRef.current.set(path, p)
-        collabSyncLog('editor', 'remote-file-defer', {
-          reason: 'sandpack-not-ready',
-          path,
-          from: p.from,
-        })
-        return
-      }
-      pendingRemoteApplyRef.current.delete(path)
-      skipOutbound.current = true
-      collabSyncLog('editor', 'remote-file-apply', {
-        path,
-        from: p.from,
-        rev: p.rev,
-        ...collabSyncTextMeta(p.content),
-      })
-      sandpackRef.current.updateFile(path, p.content, true)
-      skipOutbound.current = false
-    }
-
-    flushPendingRemoteApplyRef.current = () => {
-      if (pendingRemoteApplyRef.current.size === 0) {
-        return
-      }
-      for (const [path, p] of [...pendingRemoteApplyRef.current.entries()]) {
-        applyRemotePayload(path, p)
-      }
-    }
-
-    const onConnect = () => {
-      collabSyncLog('socket', 'connect', { room, clientId, wsUrl })
-      if (!hasSnapshotRef.current) {
-        setSnapshotReady(false)
-      }
-      lastRemoteRevision.current.clear()
-      lastLocalFsTouch.current.clear()
-      userEditedPaths.current.clear()
-      lastPresence.current = {
-        file: '',
-        anchorLine: 0,
-        anchorCol: 0,
-        headLine: 0,
-        headCol: 0,
-      }
-      socket.emit('collab-join', { room, clientId })
-    }
-    socket.on('connect', onConnect)
     if (socket.connected) {
       onConnect()
     }
@@ -440,11 +564,19 @@ export function CollabSync({
           headCol: 0,
         }
         if (typeof p?.displayName !== 'string') {
+          collabSyncWarn('socket', 'welcome-invalid', {
+            reason: 'missing-display-name',
+          })
           return
         }
         const hue = normalizePeerHueWire(p.hue)
         const colorHex = normalizePeerColorHexWire(p.colorHex)
         if (hue === undefined || colorHex === undefined) {
+          collabSyncWarn('socket', 'welcome-invalid', {
+            reason: 'invalid-color',
+            hue: p.hue,
+            colorHex: p.colorHex,
+          })
           return
         }
         const cid =
@@ -452,6 +584,12 @@ export function CollabSync({
             ? p.clientId
             : clientId
         onWelcomeRef.current?.({
+          clientId: cid,
+          displayName: p.displayName,
+          hue,
+          colorHex,
+        })
+        collabSyncLog('socket', 'welcome', {
           clientId: cid,
           displayName: p.displayName,
           hue,
@@ -485,6 +623,10 @@ export function CollabSync({
         if (rosterRaf !== null) {
           cancelAnimationFrame(rosterRaf)
         }
+        collabSyncLog('presence', 'roster-received', {
+          peerCount: peers.length,
+          count,
+        })
         rosterRaf = requestAnimationFrame(() => {
           rosterRaf = null
           onRosterRef.current?.(peers, count)
@@ -493,197 +635,43 @@ export function CollabSync({
     )
 
     socket.on('collab-snapshot', (payload: CollabSnapshotPayload) => {
-      collabSyncLog('snapshot', 'inbound', {
-        room,
-        fileCount: Object.keys(payload?.files ?? {}).length,
-        folderCount: Array.isArray(payload?.folders)
-          ? payload.folders.length
-          : 0,
-        prevSyncedPaths: sandpackSyncedPathsRef.current.length,
+      collabSyncLog('snapshot', 'received', {
+        fileCount: Object.keys(payload.files ?? {}).length,
+        folderCount: payload.folders?.length ?? 0,
+        previousSyncedCount: sandpackSyncedPathsRef.current.length,
       })
-      skipOutbound.current = true
-      debounceTimers.current.forEach((t) => clearTimeout(t))
-      debounceTimers.current.clear()
-      lastRemoteRevision.current.clear()
-      lastLocalFsTouch.current.clear()
-      userEditedPaths.current.clear()
-
       const result = handleCollabSnapshot({
         payload,
         sandpack: sandpackRef.current,
         previousSyncedPaths: sandpackSyncedPathsRef.current,
         requestProviderBoot: requestProviderBootRef.current,
       })
-
-      const nextFolders = normalizeFolderList(
-        result.explorerPaths,
-        Array.isArray(payload?.folders) ? payload.folders : [],
-      )
-
-      sandpackSyncedPathsRef.current = result.syncPaths
-      filePathsRef.current = result.explorerPaths
-      folderPathsRef.current = nextFolders
-      setFilePaths(result.explorerPaths)
-      setFolderPaths(nextFolders)
-      skipOutbound.current = false
-      hasSnapshotRef.current = true
-      outboundGraceUntilRef.current = Date.now() + COLLAB_OUTBOUND_GRACE_MS
-      setSnapshotReady(true)
-      queueMicrotask(() => flushPendingRemoteApplyRef.current())
+      if (result.skippedSandpackApply) {
+        collabSyncLog('snapshot', 'provider-boot-skipped-apply', {
+          mergedCount: Object.keys(result.merged).length,
+        })
+        return
+      }
       collabSyncLog('snapshot', 'applied', {
-        room,
-        skippedSandpackApply: result.skippedSandpackApply,
-        explorerPaths: result.explorerPaths.length,
-        syncPaths: result.syncPaths.length,
+        mergedCount: Object.keys(result.merged).length,
+        explorerCount: result.explorerPaths.length,
+        syncCount: result.syncPaths.length,
       })
-    })
-
-    socket.on('collab-file', (wire: RemoteFileWire) => {
-      const parsed = parseRemoteFileWire(wire)
-      if (!parsed.ok) {
-        collabSyncLog('editor', 'remote-file-skip', { reason: parsed.reason })
-        return
-      }
-      const p = parsed.value
-      if (p.from === clientId) {
-        return
-      }
-      const path = p.path
-      if (typeof p.rev === 'number' && Number.isFinite(p.rev)) {
-        const currentRev = lastRemoteRevision.current.get(path) ?? 0
-        const nextRev = Math.floor(p.rev)
-        if (nextRev <= currentRev) {
-          collabSyncLog('editor', 'remote-file-skip', {
-            reason: 'stale-rev',
-            path,
-            rev: nextRev,
-            currentRev,
-            from: p.from,
-          })
-          return
-        }
-        lastRemoteRevision.current.set(path, nextRev)
-      }
-      setFilePaths((prev) => {
-        const next = prev.includes(path)
-          ? prev
-          : [...prev, path].sort((a, b) => a.localeCompare(b))
-        filePathsRef.current = next
-        setFolderPaths((currentFolders) => {
-          const nextFolders = normalizeFolderList(next, currentFolders)
-          folderPathsRef.current = nextFolders
-          return nextFolders
-        })
-        return next
-      })
-
-      const cur = readSandpackFileCode(sandpackRef.current.files[path])
-      if (cur === p.content) {
-        return
-      }
-      if (
-        userEditedPaths.current.has(path) &&
-        isStaleShorterPrefix(path, p.content, cur, lastLocalFsTouch.current)
-      ) {
-        collabSyncLog('editor', 'remote-file-skip', {
-          reason: 'stale-shorter-prefix',
-          path,
-          from: p.from,
-        })
-        return
-      }
-      const touched = lastLocalFsTouch.current.get(path)
-      if (
-        userEditedPaths.current.has(path) &&
-        touched != null &&
-        Date.now() - touched < REMOTE_FILE_GUARD_MS
-      ) {
-        collabSyncLog('editor', 'remote-file-skip', {
-          reason: 'local-guard',
-          path,
-          from: p.from,
-          msSinceLocal: Date.now() - touched,
-        })
-        return
-      }
-      applyRemotePayload(path, p)
-    })
-
-    socket.on('collab-remove', (wire: RemoteRemoveWire) => {
-      const parsed = parseRemoteRemoveWire(wire)
-      if (!parsed.ok) {
-        collabSyncLog('editor', 'remote-remove-skip', {
-          reason: parsed.reason,
-        })
-        return
-      }
-      const { path, from, rev } = parsed.value
-      if (from === clientId) {
-        collabSyncLog('editor', 'remote-remove-skip', { reason: 'self-echo' })
-        return
-      }
-      if (rev !== undefined) {
-        const currentRev = lastRemoteRevision.current.get(path) ?? 0
-        if (rev <= currentRev) {
-          collabSyncLog('editor', 'remote-remove-skip', {
-            reason: 'stale-rev',
-            path,
-            rev,
-            currentRev,
-          })
-          return
-        }
-        lastRemoteRevision.current.set(path, rev)
-      }
-      if (!sandpackRef.current.files[path]) {
-        collabSyncLog('editor', 'remote-remove-skip', {
-          reason: 'unchanged',
-          path,
-        })
-        return
-      }
-      const pending = debounceTimers.current.get(path)
-      if (pending) {
-        clearTimeout(pending)
-        debounceTimers.current.delete(path)
-      }
-      setFilePaths((prev) => {
-        const next = prev.filter((entry) => entry !== path)
-        filePathsRef.current = next
-        setFolderPaths((currentFolders) => {
-          const nextFolders = normalizeFolderList(next, currentFolders)
-          folderPathsRef.current = nextFolders
-          return nextFolders
-        })
-        return next
-      })
-      userEditedPaths.current.delete(path)
-      lastLocalFsTouch.current.delete(path)
-      skipOutbound.current = true
-      sandpackRef.current.deleteFile(path, true)
-      skipOutbound.current = false
-    })
-
-    socket.on('collab-folders', (folders: string[]) => {
-      const nextFolders = normalizeFolderList(
-        filePathsRef.current,
-        Array.isArray(folders) ? folders : [],
-      )
-      folderPathsRef.current = nextFolders
-      setFolderPaths(nextFolders)
+      refreshFromYDoc()
     })
 
     return () => {
       if (rosterRaf !== null) {
         cancelAnimationFrame(rosterRaf)
       }
-      debounceMap.forEach((t) => clearTimeout(t))
-      debounceMap.clear()
-      socket.off('connect', onConnect)
+      destroyProvider()
+      doc.off('update', onDocUpdate)
+      doc.destroy()
+      ydocRef.current = null
       socket.disconnect()
       socketRef.current = null
     }
-  }, [room, clientId])
+  }, [applyYDocToSandpack, clientId, refreshFromYDoc, room])
 
   useEffect(() => {
     if (sandpack.status !== 'running') {
@@ -691,126 +679,117 @@ export function CollabSync({
     }
     const unsub = listen((message) => {
       if (skipOutbound.current) {
-        if (isFsChange(message) || isFsRemove(message)) {
-          collabSyncLog('editor', 'local-fs-suppressed', {
-            type: (message as FsChange | FsRemove).type,
-            path: (message as FsChange | FsRemove).path,
-          })
-        }
+        collabSyncLog('sandpack-listen', 'skip-outbound-global', {
+          type:
+            typeof message === 'object' && message !== null
+              ? (message as { type?: unknown }).type
+              : typeof message,
+        })
         return
       }
       if (isFsChange(message)) {
         const normalizedPath = normalizeSandpackFilePath(message.path)
-        if (!normalizedPath) {
-          return
-        }
-        if (Date.now() < outboundGraceUntilRef.current) {
-          collabSyncLog('editor', 'local-fs-suppressed', {
-            reason: 'outbound-grace',
-            path: normalizedPath,
+        const doc = ydocRef.current
+        if (!normalizedPath || !doc) {
+          collabSyncLog('sandpack-listen', 'skip-change-invalid', {
+            path: message.path,
+            hasDoc: Boolean(doc),
           })
           return
         }
-        userEditedPaths.current.add(normalizedPath)
-        lastLocalFsTouch.current.set(normalizedPath, Date.now())
-        const prev = debounceTimers.current.get(normalizedPath)
-        if (prev) {
-          clearTimeout(prev)
-          collabSyncLog('editor', 'local-file-debounce-reset', {
-            path: normalizedPath,
-          })
-        } else {
-          collabSyncLog('editor', 'local-file-debounce-start', {
-            path: normalizedPath,
-            debounceMs: COLLAB_FILE_DEBOUNCE_MS,
-          })
-        }
-        debounceTimers.current.set(
-          normalizedPath,
-          setTimeout(() => {
-            debounceTimers.current.delete(normalizedPath)
-            const content =
-              readSandpackFileCode(
-                sandpackRef.current.files[normalizedPath],
-              ) ?? ''
-            const outbound = validateOutboundFile({
-              path: normalizedPath,
-              content,
-              clientId,
-            })
-            if (!outbound.ok) {
-              collabSyncLog('editor', 'local-file-skip', {
-                reason: outbound.reason,
-                path: normalizedPath,
-              })
-              return
-            }
-            collabSyncLog('editor', 'local-file-emit', {
-              path: outbound.path,
-              room,
-              ...collabSyncTextMeta(outbound.content),
-            })
-            socketRef.current?.emit('collab-file', {
-              room,
-              path: outbound.path,
-              content: outbound.content,
-              from: outbound.from,
-            })
-          }, COLLAB_FILE_DEBOUNCE_MS),
+        const activePath = normalizeSandpackFilePath(
+          sandpackRef.current.activeFile ?? '',
         )
+        const recentEditorUntil =
+          recentEditorChangeUntil.current.get(normalizedPath) ?? 0
+        if (normalizedPath === activePath) {
+          collabSyncLog('sandpack-listen', 'skip-active-file-fs-change', {
+            path: normalizedPath,
+            activeFile: activePath,
+            ...collabSyncTextMeta(message.content),
+          })
+          return
+        }
+        if (Date.now() < recentEditorUntil) {
+          collabSyncLog(
+            'sandpack-listen',
+            'skip-recent-editor-file-fs-change',
+            {
+              path: normalizedPath,
+              msLeft: Math.max(0, recentEditorUntil - Date.now()),
+              ...collabSyncTextMeta(message.content),
+            },
+          )
+          return
+        }
+        if (!yjsSyncedRef.current) {
+          collabSyncWarn('sandpack-listen', 'skip-change-before-yjs-sync', {
+            path: normalizedPath,
+            ...collabSyncTextMeta(message.content),
+          })
+          return
+        }
+        const suppressUntil =
+          suppressSandpackUntil.current.get(normalizedPath) ?? 0
+        if (Date.now() < suppressUntil) {
+          collabSyncLog('sandpack-listen', 'skip-change-suppressed', {
+            path: normalizedPath,
+            suppressMsLeft: Math.max(0, suppressUntil - Date.now()),
+            ...collabSyncTextMeta(message.content),
+          })
+          return
+        }
+        const yText = getYFileText(doc, normalizedPath)
+        const yFiles = getYFilesMap(doc)
+        const yTextContent = yText.toJSON()
+        if (yFiles.has(normalizedPath) && yTextContent === message.content) {
+          collabSyncLog('sandpack-listen', 'skip-change-yjs-already-matches', {
+            path: normalizedPath,
+            ...collabSyncTextMeta(message.content),
+          })
+          return
+        }
+        collabSyncLog('sandpack-listen', 'fs-change-to-yjs', {
+          path: normalizedPath,
+          currentYTextLen: yText.length,
+          ...collabSyncTextMeta(message.content),
+        })
+        doc.transact(() => {
+          yFiles.set(normalizedPath, true)
+          syncYTextToContent(yText, message.content)
+        }, YJS_ORIGIN_SANDPACK_FS)
       } else if (isFsRemove(message)) {
         const normalizedPath = normalizeSandpackFilePath(message.path)
-        if (!normalizedPath) {
+        const doc = ydocRef.current
+        if (!normalizedPath || !doc) {
+          collabSyncLog('sandpack-listen', 'skip-remove-invalid', {
+            path: message.path,
+            hasDoc: Boolean(doc),
+          })
           return
         }
-        userEditedPaths.current.delete(normalizedPath)
-        lastLocalFsTouch.current.delete(normalizedPath)
-        const pending = debounceTimers.current.get(normalizedPath)
-        if (pending) {
-          clearTimeout(pending)
-          debounceTimers.current.delete(normalizedPath)
-        }
-        const outboundRemove = validateOutboundRemove({
-          path: normalizedPath,
-          clientId,
-        })
-        if (!outboundRemove.ok) {
-          collabSyncLog('editor', 'local-remove-skip', {
-            reason: outboundRemove.reason,
+        if (!yjsSyncedRef.current) {
+          collabSyncWarn('sandpack-listen', 'skip-remove-before-yjs-sync', {
             path: normalizedPath,
           })
           return
         }
-        socketRef.current?.emit('collab-remove', {
-          room,
-          path: outboundRemove.path,
-          from: outboundRemove.from,
+        collabSyncLog('sandpack-listen', 'fs-remove-to-yjs', {
+          path: normalizedPath,
         })
+        doc.transact(() => {
+          getYFilesMap(doc).delete(normalizedPath)
+        }, YJS_ORIGIN_SANDPACK_FS)
       }
     })
+    applyYDocToSandpack()
     return unsub
-  }, [listen, room, clientId, sandpack.status])
-
-  useEffect(() => {
-    if (sandpack.status === 'running') {
-      flushPendingRemoteApplyRef.current()
-    }
-  }, [sandpack.status])
-
-  useEffect(() => {
-    hasSnapshotRef.current = false
-    outboundGraceUntilRef.current = 0
-    pendingRemoteApplyRef.current.clear()
-    setSnapshotReady(false)
-  }, [room])
+  }, [applyYDocToSandpack, listen, sandpack.status])
 
   useEffect(() => {
     if (sandpack.status !== 'running' || !snapshotReady) {
       return
     }
-    collabSyncLog('presence', 'reset-on-active-file', {
-      activeFile: normalizeSandpackFilePath(sandpack.activeFile ?? ''),
-    })
     lastPresence.current = {
       file: '',
       anchorLine: 0,
@@ -824,8 +803,6 @@ export function CollabSync({
     if (sandpack.status !== 'running') {
       return
     }
-    /** Must not bail when socket is still connecting — otherwise this effect
-     * never re-runs and presence never starts (peers see no remote cursor). */
     const id = window.setInterval(() => {
       const socket = socketRef.current
       if (!socket?.connected) {
@@ -856,18 +833,17 @@ export function CollabSync({
         headLine,
         headCol,
       }
-      collabSyncLog('presence', 'emit', {
+      socket.emit('collab-presence', {
         room,
-        file,
+        clientId,
+        activeFile: file,
         anchorLine,
         anchorCol,
         headLine,
         headCol,
       })
-      socket.emit('collab-presence', {
-        room,
-        clientId,
-        activeFile: file,
+      collabSyncLog('presence', 'emit', {
+        file,
         anchorLine,
         anchorCol,
         headLine,
@@ -881,7 +857,6 @@ export function CollabSync({
     if (sandpack.status !== 'running') {
       return
     }
-
     let cursorInsidePage = true
     let lastPageLeaveAt = 0
 
@@ -891,6 +866,7 @@ export function CollabSync({
         return
       }
       lastPageLeaveAt = now
+      collabSyncLog('presence', 'page-leave', { room, clientId })
       socketRef.current?.emit('collab-page-leave', { room, clientId })
     }
 
