@@ -1,5 +1,4 @@
 import { useMemo } from 'react'
-import { useSandpack } from '@codesandbox/sandpack-react'
 import {
   Avatar,
   Box,
@@ -14,6 +13,7 @@ import { alpha, useTheme } from '@mui/material/styles'
 import type { CollabPeerDTO } from '../collab/collab.types'
 import { peerAccentRgbCss } from '../collab/peerColor'
 import { normalizeSandpackFilePath } from '../collab/sandpackPaths'
+import { useWorkspace } from '../workspace/WorkspaceContext'
 
 function peerInitials(displayName: string): string {
   const parts = displayName.trim().split(/\s+/).filter(Boolean)
@@ -41,7 +41,7 @@ export function PlaygroundCollabBar({
   selfClientId: string
 }) {
   const theme = useTheme()
-  const { sandpack } = useSandpack()
+  const workspace = useWorkspace()
 
   const sortedPeers = useMemo(() => {
     const next = [...collabPeers]
@@ -108,7 +108,7 @@ export function PlaygroundCollabBar({
           >
             {sortedPeers.map((p) => {
               const path = normalizeSandpackFilePath(p.activeFile)
-              const canOpen = Boolean(path && sandpack.files[path])
+              const canOpen = Boolean(path && workspace.files[path])
               const base = fileBasename(p.activeFile)
               const accentCss = peerAccentRgbCss(p)
               const contrast = theme.palette.getContrastText(accentCss)
@@ -219,7 +219,7 @@ export function PlaygroundCollabBar({
                           disabled={!canOpen}
                           onClick={() => {
                             if (canOpen && path) {
-                              sandpack.openFile(path)
+                              workspace.openFile(path)
                             }
                           }}
                           sx={{

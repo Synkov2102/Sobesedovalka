@@ -14,9 +14,9 @@ import {
 import { sortPaths, sortUniqueFolderPaths } from '../utils/sort'
 
 type SandpackLike = {
-  files: Record<string, { code?: string } | undefined>
-  addFile: (path: string, code: string, shouldUpdatePreview: boolean) => void
-  deleteFile: (path: string, shouldUpdatePreview: boolean) => void
+  files: Record<string, string | undefined>
+  updateFile: (path: string, code: string) => void
+  deleteFile: (path: string) => void
   openFile: (path: string) => void
 }
 
@@ -57,14 +57,14 @@ export function useExplorerFsOps({
     [folderPaths],
   )
 
-  const deleteSandpackFiles = useCallback(
+  const deleteWorkspaceFiles = useCallback(
     (paths: string[]) => {
       const entries = paths
         .filter((path) => sandpack.files[path])
         .sort((a, b) => b.length - a.length)
 
-      entries.forEach((path, index) => {
-        sandpack.deleteFile(path, index === entries.length - 1)
+      entries.forEach((path) => {
+        sandpack.deleteFile(path)
       })
     },
     [sandpack],
@@ -81,7 +81,7 @@ export function useExplorerFsOps({
           return
         }
         removeFile(target.path)
-        sandpack.deleteFile(target.path, true)
+        sandpack.deleteFile(target.path)
         closeContextMenu()
         return
       }
@@ -102,14 +102,14 @@ export function useExplorerFsOps({
         nextFolders,
         filePaths.filter((path) => !isPathInFolder(path, target.path)),
       )
-      deleteSandpackFiles(entries)
+      deleteWorkspaceFiles(entries)
       closeContextMenu()
     },
     [
       canRenameFile,
       canRenameFolder,
       closeContextMenu,
-      deleteSandpackFiles,
+      deleteWorkspaceFiles,
       filePaths,
       folderPaths,
       removeFile,
@@ -164,11 +164,11 @@ export function useExplorerFsOps({
           : getFolderAncestors(sourceParentPath)),
       ])
 
-      saveFile(nextPath, source.code ?? '')
+      saveFile(nextPath, source ?? '')
       removeFile(fromPath)
       syncFolders(nextFolders, nextFilePaths)
-      sandpack.addFile(nextPath, source.code ?? '', false)
-      sandpack.deleteFile(fromPath, true)
+      sandpack.updateFile(nextPath, source ?? '')
+      sandpack.deleteFile(fromPath)
 
       if (active === fromPath) {
         sandpack.openFile(nextPath)
@@ -254,15 +254,15 @@ export function useExplorerFsOps({
 
       entriesToMove.forEach((path) => {
         const nextPath = replacePathPrefix(path, fromPath, nextFolderPath)
-        saveFile(nextPath, sandpack.files[path]?.code ?? '')
+        saveFile(nextPath, sandpack.files[path] ?? '')
       })
       entriesToMove.forEach((path) => removeFile(path))
       syncFolders(nextFolders, nextFilePaths)
       entriesToMove.forEach((path) => {
         const nextPath = replacePathPrefix(path, fromPath, nextFolderPath)
-        sandpack.addFile(nextPath, sandpack.files[path]?.code ?? '', false)
+        sandpack.updateFile(nextPath, sandpack.files[path] ?? '')
       })
-      deleteSandpackFiles(entriesToMove)
+      deleteWorkspaceFiles(entriesToMove)
 
       if (active && isPathInFolder(active, fromPath)) {
         sandpack.openFile(replacePathPrefix(active, fromPath, nextFolderPath))
@@ -281,7 +281,7 @@ export function useExplorerFsOps({
     },
     [
       active,
-      deleteSandpackFiles,
+      deleteWorkspaceFiles,
       filePathSet,
       filePaths,
       folderPathSet,

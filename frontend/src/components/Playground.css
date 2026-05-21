@@ -16,23 +16,6 @@
   padding: 8px 10px;
 }
 
-.playground__spWrap {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-/* SandpackProvider renders a root div — stretch it so the inner layout can fill height. */
-.playground__spWrap > div {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
 .playground__providerInner {
   flex: 1;
   min-height: 0;
@@ -143,86 +126,91 @@
   }
 }
 
-.playground__sandpack {
-  min-height: min(62vh, 640px);
-  --sp-border-radius: 8px;
-}
-
-.playground--fill .playground__sandpack {
-  flex: 1 1 0 !important;
-  min-height: 0 !important;
-  height: 100% !important;
-  max-height: 100% !important;
-}
-
-.playground--fill .playground__sandpack.sp-layout {
-  flex: 1 1 0 !important;
-  min-height: 0 !important;
-  min-width: 0 !important;
-  height: 100% !important;
-  max-height: 100% !important;
-  display: flex !important;
-  flex-wrap: nowrap !important;
-  align-items: stretch !important;
-}
-
-.playground--fill .sp-layout > .sp-editor {
-  flex: 1 1 0% !important;
-  min-width: 0 !important;
-  min-height: 0 !important;
-  height: 100% !important;
-  max-height: none !important;
-  overflow: hidden !important;
-  display: flex !important;
-  flex-direction: column !important;
-}
-
-.playground--fill .sp-layout > .sp-preview {
-  flex: 1 1 0% !important;
-  min-width: 0 !important;
-  min-height: 0 !important;
-  height: 100% !important;
-  max-height: none !important;
-  overflow: hidden !important;
-  display: flex !important;
-  flex-direction: column !important;
-}
-
-.playground--fill .sp-editor .sp-code-editor {
-  flex: 1 1 0% !important;
-  min-height: 0 !important;
-  overflow: hidden !important;
-  display: flex !important;
-  flex-direction: column !important;
-}
-
-.playground--fill .sp-editor .cm-editor {
-  flex: 1 1 0% !important;
-  height: 100% !important;
-  min-height: 0 !important;
-}
-
-.playground--fill .sp-editor .cm-scroller {
-  flex: 1 1 0% !important;
-  min-height: 0 !important;
-  max-height: none !important;
-}
-
-.playground--fill .sp-preview .sp-preview-container {
-  flex: 1 1 0% !important;
-  min-height: 0 !important;
-  display: flex !important;
-  flex-direction: column !important;
-}
-
-.playground--fill .sp-preview .sp-preview-iframe {
-  flex: 1 1 0% !important;
-  width: 100% !important;
-  min-height: 0 !important;
-  height: 100% !important;
-  border: none;
-}
-
-.playground__sandpack.sp-layout {
+.playground__workspace {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(320px, 1fr);
   border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.playground__editorPane,
+.playground__previewPane {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+}
+
+.playground__editorTabs,
+.playground__previewHeader {
+  flex-shrink: 0;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--code-bg) 70%, var(--bg));
+}
+
+.playground__editorTab {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-h);
+}
+
+.playground__emptyEditor {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  color: var(--text);
+}
+
+.playground__previewStatus {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.playground__previewError {
+  flex-shrink: 0;
+  max-height: 35%;
+  overflow: auto;
+  margin: 0;
+  padding: 10px;
+  color: #f87171;
+  background: color-mix(in srgb, #7f1d1d 22%, var(--code-bg));
+  border-bottom: 1px solid var(--border);
+  white-space: pre-wrap;
+}
+
+.playground__previewIframe {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  border: none;
+  background: #fff;
+}
+
+@media (max-width: 1100px) {
+  .playground__workspace {
+    grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+    grid-template-rows: minmax(320px, 1fr) minmax(260px, 0.8fr);
+  }
+
+  .playground__previewPane {
+    grid-column: 1 / -1;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
 }

@@ -9,10 +9,6 @@ import type {
 } from '../types/playgroundFileExplorer.types'
 import { getParentPath, isPathInFolder } from '../utils/paths'
 
-type SandpackLike = {
-  openFile: (path: string) => void
-}
-
 export function renderFile({
   file,
   depth,
@@ -20,7 +16,7 @@ export function renderFile({
   focusedPath,
   setFocusedPath,
   active,
-  sandpack,
+  openFile,
   peersByActiveFile,
   openContextMenu,
   dragItem,
@@ -36,7 +32,7 @@ export function renderFile({
   focusedPath: string
   setFocusedPath: Dispatch<SetStateAction<string>>
   active: string
-  sandpack: SandpackLike
+  openFile: (path: string) => void
   peersByActiveFile: Map<string, CollabPeerDTO[]>
   openContextMenu: (
     event: MouseEvent<HTMLElement>,
@@ -65,7 +61,7 @@ export function renderFile({
   const draggable = true
 
   function handleClick() {
-    sandpack.openFile(file.path)
+    openFile(file.path)
     setFocusedPath(file.path)
   }
 

@@ -1,16 +1,9 @@
-.playground--fill .sp-layout > .sp-file-explorer {
-  flex: 0 0 220px !important;
-  max-width: min(280px, 30vw) !important;
-  min-width: 160px !important;
-  height: 100% !important;
-  max-height: none !important;
-  overflow: hidden !important;
-}
-
 .playground__fileExplorer {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
   background: color-mix(in srgb, var(--code-bg) 88%, var(--bg));
 }
 

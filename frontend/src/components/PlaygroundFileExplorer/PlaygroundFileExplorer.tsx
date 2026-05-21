@@ -1,9 +1,9 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { MouseEvent } from 'react'
-import { useSandpack } from '@codesandbox/sandpack-react'
 import { useCollabFs } from '../collabFsContext'
 import type { CollabPeerDTO } from '../../collab/collab.types'
 import { normalizeSandpackFilePath } from '../../collab/sandpackPaths'
+import { useWorkspace } from '../../workspace/WorkspaceContext'
 import { VITE_REACT_TS_PROTECTED } from './constants/playgroundFileExplorer.constants'
 import { useClearDropTargetWhenNoDrag } from './hooks/useDragDropUiSync'
 import { useCopiedPathReset } from './hooks/useCopiedPathReset'
@@ -44,7 +44,7 @@ export function PlaygroundFileExplorer({
 }: {
   collabPeers?: CollabPeerDTO[]
 } = {}) {
-  const { sandpack } = useSandpack()
+  const workspace = useWorkspace()
   const {
     filePaths,
     folderPaths,
@@ -60,7 +60,7 @@ export function PlaygroundFileExplorer({
   const [dragItem, setDragItem] = useState<DragItem | null>(null)
   const [dropTargetPath, setDropTargetPath] = useState<string | null>(null)
   const [copiedPath, setCopiedPath] = useState<string | null>(null)
-  const active = normalizeSandpackFilePath(sandpack.activeFile ?? '')
+  const active = normalizeSandpackFilePath(workspace.activeFile ?? '')
   const filePathSet = useMemo(() => new Set(filePaths), [filePaths])
   const folderPathSet = useMemo(() => new Set(folderPaths), [folderPaths])
   const tree = useMemo(
@@ -150,7 +150,12 @@ export function PlaygroundFileExplorer({
   }, [])
 
   const { deletePath, moveFilePath, moveFolderPath } = useExplorerFsOps({
-    sandpack,
+    sandpack: {
+      files: workspace.files,
+      updateFile: workspace.updateWorkspaceFile,
+      deleteFile: workspace.deleteWorkspaceFile,
+      openFile: workspace.openFile,
+    },
     active,
     filePaths,
     folderPaths,
@@ -194,7 +199,7 @@ export function PlaygroundFileExplorer({
       }
 
       if (filePathSet.has(filePath)) {
-        sandpack.openFile(filePath)
+        workspace.openFile(filePath)
         setFocusedPath(filePath)
         setDraft(null)
         return
@@ -202,8 +207,8 @@ export function PlaygroundFileExplorer({
 
       const content = ''
       saveFile(filePath, content)
-      sandpack.addFile(filePath, content, true)
-      sandpack.openFile(filePath)
+      workspace.updateWorkspaceFile(filePath, content)
+      workspace.openFile(filePath)
       setFocusedPath(filePath)
       setDraft(null)
       return
@@ -262,9 +267,9 @@ export function PlaygroundFileExplorer({
     mergeFolderPaths,
     moveFilePath,
     moveFolderPath,
-    sandpack,
     saveFile,
     syncFolders,
+    workspace,
   ])
 
   const openContextMenu = useCallback(
@@ -439,7 +444,7 @@ export function PlaygroundFileExplorer({
         focusedPath,
         setFocusedPath,
         active,
-        sandpack,
+        openFile: workspace.openFile,
         peersByActiveFile,
         openContextMenu,
         dragItem,
@@ -459,7 +464,7 @@ export function PlaygroundFileExplorer({
       openContextMenu,
       peersByActiveFile,
       renderDraftRow,
-      sandpack,
+      workspace.openFile,
     ],
   )
 

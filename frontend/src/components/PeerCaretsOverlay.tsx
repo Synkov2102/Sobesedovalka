@@ -1,114 +1,31 @@
-import type { Text } from '@codemirror/state'
-import { EditorView } from '@codemirror/view'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useSandpack } from '@codesandbox/sandpack-react'
 import type { CollabPeerDTO } from '../collab/collab.types'
 import { peerAccentRgbCss, peerAccentRgbaCss } from '../collab/peerColor'
 import { normalizeSandpackFilePath } from '../collab/sandpackPaths'
-
-function lineColToPos(doc: Text, line: number, col: number): number {
-  const ln = Math.min(Math.max(1, line), doc.lines)
-  const lineObj = doc.line(ln)
-  const c = Math.max(1, col)
-  return Math.min(lineObj.from + c - 1, lineObj.to)
-}
-
-function peerAnchorHead(p: CollabPeerDTO): {
-  anchorLine: number
-  anchorCol: number
-  headLine: number
-  headCol: number
-} {
-  const headLine = p.headLine ?? p.line
-  const headCol = p.headCol ?? p.col
-  const anchorLine = p.anchorLine ?? p.line
-  const anchorCol = p.anchorCol ?? p.col
-  return { anchorLine, anchorCol, headLine, headCol }
-}
-
-/** Screen-space rectangles for [from, to) in document positions. */
-function selectionScreenRects(
-  view: EditorView,
-  doc: Text,
-  from: number,
-  to: number,
-): Array<{ left: number; top: number; width: number; height: number }> {
-  const rects: Array<{
-    left: number
-    top: number
-    width: number
-    height: number
-  }> = []
-  if (from === to) {
-    return rects
-  }
-  let pos = Math.min(from, to)
-  const end = Math.max(from, to)
-  while (pos < end) {
-    const line = doc.lineAt(pos)
-    const segStart = Math.max(pos, line.from)
-    const segEnd = Math.min(end, line.to)
-    if (segStart < segEnd) {
-      const c0 = view.coordsAtPos(segStart, 1)
-      const lastChar = Math.max(segStart, segEnd - 1)
-      const c1 = view.coordsAtPos(lastChar, 1)
-      if (c0 && c1) {
-        const left = Math.min(c0.left, c1.left, c0.right, c1.right)
-        const right = Math.max(c0.left, c1.left, c0.right, c1.right)
-        const top = Math.min(c0.top, c1.top)
-        const bottom = Math.max(c0.bottom, c1.bottom)
-        const h = Math.max(bottom - top, 12)
-        rects.push({
-          left,
-          top,
-          width: Math.max(right - left, 3),
-          height: h,
-        })
-      }
-    }
-    const next = line.to + 1
-    if (next <= pos) {
-      break
-    }
-    pos = next
-  }
-  return rects
-}
+import { getActiveMonacoEditor } from '../workspace/monacoPresence'
+import { useWorkspace } from '../workspace/WorkspaceContext'
 
 type PeerMark = {
   id: string
   name: string
   color: string
-  colorSelBg: string
-  colorSelBorder: string
   colorRing: string
   caret: { left: number; top: number; height: number } | null
-  selection: Array<{ left: number; top: number; width: number; height: number }>
-}
-
-function coordKey(value: number): number {
-  return Math.round(value * 2) / 2
 }
 
 function marksKey(marks: PeerMark[]): string {
   return marks
-    .map((m) => {
-      const caret = m.caret
-        ? `${coordKey(m.caret.left)},${coordKey(m.caret.top)},${coordKey(
-            m.caret.height,
-          )}`
-        : ''
-      const selection = m.selection
-        .map(
-          (r) =>
-            `${coordKey(r.left)},${coordKey(r.top)},${coordKey(
-              r.width,
-            )},${coordKey(r.height)}`,
-        )
-        .join(';')
-      return `${m.id}:${m.name}:${m.color}:${caret}:${selection}`
-    })
+    .map((m) =>
+      [
+        m.id,
+        m.name,
+        m.color,
+        m.caret?.left.toFixed(1) ?? '',
+        m.caret?.top.toFixed(1) ?? '',
+        m.caret?.height.toFixed(1) ?? '',
+      ].join(':'),
+    )
     .join('|')
 }
 
@@ -119,82 +36,59 @@ export function PeerCaretsOverlay({
   selfId: string
   peers: CollabPeerDTO[]
 }) {
-  const { sandpack } = useSandpack()
+  const workspace = useWorkspace()
   const [marks, setMarks] = useState<PeerMark[]>([])
-  const marksKeyRef = useRef('')
+  const keyRef = useRef('')
 
   useEffect(() => {
     let raf = 0
-    const updateMarks = (next: PeerMark[]) => {
-      const nextKey = marksKey(next)
-      if (nextKey === marksKeyRef.current) {
-        return
-      }
-      marksKeyRef.current = nextKey
-      setMarks(next)
-    }
     const tick = () => {
-      const cm = document.querySelector(
-        '.playground__sandpack .sp-editor .cm-content',
-      )
-      if (!cm || !(cm instanceof HTMLElement)) {
-        updateMarks([])
-        raf = requestAnimationFrame(tick)
-        return
-      }
-      const view = EditorView.findFromDOM(cm)
-      const active = normalizeSandpackFilePath(sandpack.activeFile ?? '')
+      const editor = getActiveMonacoEditor()
+      const active = normalizeSandpackFilePath(workspace.activeFile)
       const next: PeerMark[] = []
-      if (view && active) {
-        const doc = view.state.doc
-        for (const p of peers) {
+      if (editor && active) {
+        for (const peer of peers) {
           if (
-            p.clientId === selfId ||
-            normalizeSandpackFilePath(p.activeFile) !== active
+            peer.clientId === selfId ||
+            normalizeSandpackFilePath(peer.activeFile) !== active
           ) {
             continue
           }
-          const { anchorLine, anchorCol, headLine, headCol } = peerAnchorHead(p)
-          const a = lineColToPos(doc, anchorLine, anchorCol)
-          const h = lineColToPos(doc, headLine, headCol)
-          const from = Math.min(a, h)
-          const to = Math.max(a, h)
-          const color = peerAccentRgbCss(p)
-          const colorSelBg = peerAccentRgbaCss(p, 0.22)
-          const colorSelBorder = peerAccentRgbaCss(p, 0.45)
-          const colorRing = peerAccentRgbaCss(p, 0.55)
-          const selection =
-            from < to ? selectionScreenRects(view, doc, from, to) : []
-          const headPos = h
-          const c = view.coordsAtPos(headPos)
-          const caret =
-            c != null
-              ? {
-                  left: c.left,
-                  top: c.top,
-                  height: Math.max(14, c.bottom - c.top),
-                }
-              : null
-          if (caret != null || selection.length > 0) {
-            next.push({
-              id: p.clientId,
-              name: p.displayName,
-              color,
-              colorSelBg,
-              colorSelBorder,
-              colorRing,
-              caret,
-              selection,
-            })
+          const position = {
+            lineNumber: peer.headLine ?? peer.line,
+            column: peer.headCol ?? peer.col,
           }
+          const coords = editor.getScrolledVisiblePosition(position)
+          if (!coords) {
+            continue
+          }
+          const container = editor.getDomNode()?.getBoundingClientRect()
+          if (!container) {
+            continue
+          }
+          next.push({
+            id: peer.clientId,
+            name: peer.displayName,
+            color: peerAccentRgbCss(peer),
+            colorRing: peerAccentRgbaCss(peer, 0.55),
+            caret: {
+              left: container.left + coords.left,
+              top: container.top + coords.top,
+              height: coords.height,
+            },
+          })
         }
       }
-      updateMarks(next)
+      const nextKey = marksKey(next)
+      if (nextKey !== keyRef.current) {
+        keyRef.current = nextKey
+        setMarks(next)
+      }
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [peers, sandpack.activeFile, selfId])
+  }, [peers, selfId, workspace.activeFile])
 
   if (typeof document === 'undefined') {
     return null
@@ -202,28 +96,9 @@ export function PeerCaretsOverlay({
 
   return createPortal(
     <div className="peer-carets-root" aria-hidden>
-      {marks.map((m) => (
-        <div key={m.id} className="peer-caret-wrap">
-          {m.selection.map((r, i) => (
-            <div
-              key={`s-${i}`}
-              className="peer-selection"
-              style={{
-                position: 'fixed',
-                left: r.left,
-                top: r.top,
-                width: r.width,
-                height: r.height,
-                background: m.colorSelBg,
-                borderRadius: 2,
-                pointerEvents: 'none',
-                zIndex: 9998,
-                boxSizing: 'border-box',
-                border: `1px solid ${m.colorSelBorder}`,
-              }}
-            />
-          ))}
-          {m.caret ? (
+      {marks.map((m) =>
+        m.caret ? (
+          <div key={m.id} className="peer-caret-wrap">
             <div
               className="peer-caret"
               style={{
@@ -239,8 +114,6 @@ export function PeerCaretsOverlay({
               }}
               title={m.name}
             />
-          ) : null}
-          {m.caret ? (
             <div
               className="peer-caret-tag"
               style={{
@@ -256,17 +129,15 @@ export function PeerCaretsOverlay({
                 pointerEvents: 'none',
                 zIndex: 10000,
                 whiteSpace: 'nowrap',
-                maxWidth: '14rem',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
               }}
             >
               {m.name}
             </div>
-          ) : null}
-        </div>
-      ))}
+          </div>
+        ) : null,
+      )}
     </div>,
     document.body,
   )
 }
+
