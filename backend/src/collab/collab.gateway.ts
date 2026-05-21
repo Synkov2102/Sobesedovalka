@@ -125,6 +125,9 @@ export class CollabGateway implements OnGatewayDisconnect {
   >();
   private readonly lastRosterPayload = new Map<string, string>();
   private readonly lastPresenceRosterAt = new Map<string, number>();
+  /** `${room}:${clientId}` -> last Mongo page-leave insert */
+  private readonly lastPageLeaveMongoAt = new Map<string, number>();
+  private static readonly PAGE_LEAVE_MONGO_COOLDOWN_MS = 5000;
   private readonly filePersistTimers = new Map<
     string,
     ReturnType<typeof setTimeout>
@@ -415,12 +418,13 @@ export class CollabGateway implements OnGatewayDisconnect {
       .catch((e: unknown) => this.logger.warn(String(e)));
   }
 
-  @SubscribeMessage('collab-page-leave')
-  handlePageLeave(
+  @SubscribeMessage('collab-cursor-away')
+  handleCursorAway(
     @MessageBody()
     body: {
       room?: string;
       clientId?: string;
+      away?: boolean;
     },
   ): void {
     const room = typeof body?.room === 'string' ? body.room : '';
@@ -430,13 +434,49 @@ export class CollabGateway implements OnGatewayDisconnect {
     }
 
     const peer = this.roomPeers.get(room)?.get(clientId);
-    void this.mongoRepo
-      .insertPageLeaveEvent({
-        roomId: room,
-        clientId,
-        displayName: peer?.displayName ?? clientId,
-      })
-      .catch((e: unknown) => this.logger.warn(String(e)));
+    if (!peer) {
+      return;
+    }
+
+    const away = body?.away === true;
+    if (peer.cursorAway === away) {
+      return;
+    }
+    peer.cursorAway = away;
+
+    if (away) {
+      const key = `${room}:${clientId}`;
+      const now = Date.now();
+      const last = this.lastPageLeaveMongoAt.get(key) ?? 0;
+      if (
+        now - last >=
+        CollabGateway.PAGE_LEAVE_MONGO_COOLDOWN_MS
+      ) {
+        this.lastPageLeaveMongoAt.set(key, now);
+        void this.mongoRepo
+          .insertPageLeaveEvent({
+            roomId: room,
+            clientId,
+            displayName: peer.displayName,
+          })
+          .catch((e: unknown) => this.logger.warn(String(e)));
+      }
+    }
+
+    this.lastRosterPayload.delete(room);
+    this.broadcastRoster(room);
+  }
+
+  /** @deprecated use collab-cursor-away with away: true */
+  @SubscribeMessage('collab-page-leave')
+  handlePageLeave(
+    @MessageBody()
+    body: {
+      room?: string;
+      clientId?: string;
+    },
+  ): void {
+    this.handleCursorAway({ ...body, away: true });
   }
 
   @SubscribeMessage('collab-yjs-update')
@@ -808,6 +848,7 @@ export class CollabGateway implements OnGatewayDisconnect {
               anchorCol: p.anchorCol,
               headLine: p.headLine,
               headCol: p.headCol,
+              cursorAway: p.cursorAway === true,
             };
           })
           .sort((a, b) => a.clientId.localeCompare(b.clientId))

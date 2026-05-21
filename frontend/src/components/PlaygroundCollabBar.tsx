@@ -113,9 +113,13 @@ export function PlaygroundCollabBar({
               const accentCss = peerAccentRgbCss(p)
               const contrast = theme.palette.getContrastText(accentCss)
               const isSelf = p.clientId === selfClientId
+              const isAway = p.cursorAway === true
+              const awayColor = theme.palette.error.main
+              const frameColor = isAway ? awayColor : accentCss
               const tooltipLines = [
                 path ? path : 'Файл не выбран',
                 `Курсор: ${p.line}:${p.col}`,
+                ...(isAway ? ['Курсор вне страницы'] : []),
               ]
               const tooltipTitle = tooltipLines.join('\n')
 
@@ -127,9 +131,16 @@ export function PlaygroundCollabBar({
                     flex: '0 0 auto',
                     maxWidth: 'min(320px, 85vw)',
                     borderRadius: 2,
-                    borderColor: alpha(accentCss, 0.38),
-                    bgcolor: alpha(accentCss, 0.07),
-                    boxShadow: `inset 3px 0 0 0 ${accentCss}`,
+                    borderWidth: isAway ? 2 : 1,
+                    borderColor: alpha(frameColor, isAway ? 0.85 : 0.38),
+                    bgcolor: alpha(frameColor, isAway ? 0.1 : 0.07),
+                    boxShadow: isAway
+                      ? `0 0 0 1px ${alpha(awayColor, 0.35)}, inset 3px 0 0 0 ${awayColor}`
+                      : `inset 3px 0 0 0 ${accentCss}`,
+                    transition: theme.transitions.create(
+                      ['border-color', 'box-shadow', 'background-color'],
+                      { duration: theme.transitions.duration.shortest },
+                    ),
                   }}
                 >
                   <Stack
@@ -178,6 +189,22 @@ export function PlaygroundCollabBar({
                           <Chip
                             label="Вы"
                             size="small"
+                            sx={{
+                              height: 22,
+                              flexShrink: 0,
+                              '& .MuiChip-label': {
+                                px: 0.85,
+                                fontSize: '0.7rem',
+                              },
+                            }}
+                          />
+                        ) : null}
+                        {isAway ? (
+                          <Chip
+                            label="Вне страницы"
+                            size="small"
+                            color="error"
+                            variant="outlined"
                             sx={{
                               height: 22,
                               flexShrink: 0,

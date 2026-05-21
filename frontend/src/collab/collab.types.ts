@@ -22,4 +22,6 @@ export type CollabPeerDTO = {
   anchorCol?: number
   headLine?: number
   headCol?: number
+  /** Курсор ушёл за пределы окна браузера */
+  cursorAway?: boolean
 }

@@ -11,4 +11,6 @@ export type RoomPeer = {
   /** Selection head / caret (where selection ends). */
   headLine: number;
   headCol: number;
+  /** Mouse left the browser viewport (ephemeral, not persisted). */
+  cursorAway?: boolean;
 };

@@ -58,7 +58,6 @@ type CollabFilePayload = {
   from?: string
 }
 
-const PAGE_LEAVE_EVENT_COOLDOWN_MS = 5000
 const YJS_ORIGIN_FILE_TREE = 'file-tree'
 const YJS_ORIGIN_REMOTE_FILE = 'remote'
 
@@ -540,23 +539,20 @@ export function CollabSync({
 
   useEffect(() => {
     let cursorInsidePage = true
-    let lastPageLeaveAt = 0
-    const emitPageLeave = () => {
-      const now = Date.now()
-      if (now - lastPageLeaveAt < PAGE_LEAVE_EVENT_COOLDOWN_MS) {
-        return
-      }
-      lastPageLeaveAt = now
-      socketRef.current?.emit('collab-page-leave', { room, clientId })
+    const emitCursorAway = (away: boolean) => {
+      socketRef.current?.emit('collab-cursor-away', { room, clientId, away })
     }
     const onMouseOut = (event: MouseEvent) => {
       if (!cursorInsidePage || !isMouseLeavingViewport(event)) {
         return
       }
       cursorInsidePage = false
-      emitPageLeave()
+      emitCursorAway(true)
     }
     const onMouseOver = () => {
+      if (!cursorInsidePage) {
+        emitCursorAway(false)
+      }
       cursorInsidePage = true
     }
     document.addEventListener('mouseout', onMouseOut)
