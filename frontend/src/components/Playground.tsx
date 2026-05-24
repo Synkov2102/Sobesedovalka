@@ -10,6 +10,7 @@ import { WorkspaceProvider } from '../workspace/WorkspaceContext'
 import { mergeWorkspaceFiles } from '../workspace/workspaceDefaults'
 import { MonacoCodeEditor } from '../workspace/MonacoCodeEditor'
 import { ClientPreview } from '../workspace/ClientPreview'
+import { ResizableWorkspace } from '../workspace/ResizableWorkspace'
 import './Playground.css'
 
 type PlaygroundProps = {
@@ -152,11 +153,11 @@ export function Playground({ onInvalidExplicitRoom }: PlaygroundProps) {
           />
           <PeerCaretsOverlay selfId={collabClientId} peers={collabPeers} />
           <div className="playground__providerInner">
-            <div className="playground__workspace">
+            <ResizableWorkspace>
               <PlaygroundFileExplorer collabPeers={collabPeers} />
               <MonacoCodeEditor />
               <ClientPreview />
-            </div>
+            </ResizableWorkspace>
           </div>
         </div>
       </CollabSync>

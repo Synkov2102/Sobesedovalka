@@ -10,6 +10,7 @@ import { WorkspaceProvider, useWorkspace } from '../../workspace/WorkspaceContex
 import { WorkspaceCollabFsBridge } from '../../workspace/WorkspaceCollabFsBridge'
 import { MonacoCodeEditor } from '../../workspace/MonacoCodeEditor'
 import { ClientPreview } from '../../workspace/ClientPreview'
+import { ResizableWorkspace } from '../../workspace/ResizableWorkspace'
 import { CollabYDocContext } from '../../collab/collabYDocContext'
 
 const SKIP_PRESET_EXPORT_PATHS = new Set([
@@ -45,11 +46,11 @@ const PresetWorkspaceBindings = forwardRef<PresetSandpackWorkspaceHandle>(
       <CollabYDocContext.Provider value={{ doc: null, synced: false }}>
         <WorkspaceCollabFsBridge>
           <div className="playground__providerInner">
-            <div className="playground__workspace">
+            <ResizableWorkspace>
               <PlaygroundFileExplorer />
               <MonacoCodeEditor />
               <ClientPreview />
-            </div>
+            </ResizableWorkspace>
           </div>
         </WorkspaceCollabFsBridge>
       </CollabYDocContext.Provider>

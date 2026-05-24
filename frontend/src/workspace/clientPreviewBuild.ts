@@ -1,5 +1,6 @@
 import * as esbuild from 'esbuild-wasm'
 import wasmUrl from 'esbuild-wasm/esbuild.wasm?url'
+import { PREVIEW_CDN_PROXY_PREFIX } from '../api/constants'
 import { normalizeWorkspacePath } from './workspacePaths'
 
 let initPromise: Promise<void> | null = null
@@ -81,19 +82,35 @@ function packageDeps(files: Record<string, string>): Record<string, string> {
   }
 }
 
+function esmProxyUrl(specifier: string): string {
+  return `${PREVIEW_CDN_PROXY_PREFIX}/${specifier}?dev`
+}
+
 function importMapFor(files: Record<string, string>): string {
   const deps = packageDeps(files)
   const imports: Record<string, string> = {
-    react: 'https://esm.sh/react',
-    'react-dom/client': 'https://esm.sh/react-dom/client',
-    'react/jsx-runtime': 'https://esm.sh/react/jsx-runtime',
+    react: esmProxyUrl('react'),
+    'react-dom/client': esmProxyUrl('react-dom/client'),
+    'react/jsx-runtime': esmProxyUrl('react/jsx-runtime'),
   }
   for (const name of Object.keys(deps)) {
     if (!imports[name]) {
-      imports[name] = `https://esm.sh/${encodeURIComponent(name)}`
+      imports[name] = esmProxyUrl(encodeURIComponent(name))
     }
   }
   return JSON.stringify({ imports }, null, 2)
+}
+
+function formatBuildErrors(errors: esbuild.Message[]): string {
+  return errors
+    .map((item) => {
+      const loc = item.location
+      if (loc) {
+        return `${loc.file}:${loc.line}:${loc.column}: ${item.text}`
+      }
+      return item.text
+    })
+    .join('\n')
 }
 
 function htmlFor(js: string, css: string, files: Record<string, string>): string {
@@ -130,6 +147,9 @@ export async function buildClientPreview(
       format: 'esm',
       jsx: 'automatic',
       target: 'es2020',
+      minify: false,
+      keepNames: true,
+      sourcemap: 'inline',
       logLevel: 'silent',
       plugins: [
         {
@@ -167,6 +187,19 @@ export async function buildClientPreview(
       result.outputFiles.find((file) => file.path.endsWith('.css'))?.text ?? ''
     return { ok: true, html: htmlFor(js, css, files) }
   } catch (error) {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'errors' in error &&
+      Array.isArray((error as { errors: unknown }).errors)
+    ) {
+      return {
+        ok: false,
+        error: formatBuildErrors(
+          (error as { errors: esbuild.Message[] }).errors,
+        ),
+      }
+    }
     const message = error instanceof Error ? error.message : String(error)
     return { ok: false, error: message }
   }
