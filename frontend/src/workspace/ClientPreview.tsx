@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { buildClientPreview } from './clientPreviewBuild'
 import { useWorkspace } from './WorkspaceContext'
 
@@ -7,8 +7,44 @@ type PreviewState =
   | { status: 'ready'; html: string; error: string }
   | { status: 'error'; html: string; error: string }
 
+function reloadPreviewIframe(iframe: HTMLIFrameElement | null): void {
+  const win = iframe?.contentWindow
+  if (!win) {
+    return
+  }
+  try {
+    win.location.reload()
+  } catch {
+    const html = iframe?.getAttribute('srcdoc')
+    if (html != null) {
+      iframe.srcdoc = html
+    }
+  }
+}
+
+/** Новый iframe: сброс React-состояния и sessionStorage; localStorage — только если не общий с хостом. */
+function resetPreviewIframe(
+  iframe: HTMLIFrameElement | null,
+  remount: () => void,
+): void {
+  const win = iframe?.contentWindow
+  if (win) {
+    try {
+      win.sessionStorage.clear()
+      if (win.localStorage !== window.localStorage) {
+        win.localStorage.clear()
+      }
+    } catch {
+      // storage недоступен в sandbox без allow-same-origin
+    }
+  }
+  remount()
+}
+
 export function ClientPreview() {
   const { files } = useWorkspace()
+  const previewIframeRef = useRef<HTMLIFrameElement>(null)
+  const [resetGeneration, setResetGeneration] = useState(0)
   const [state, setState] = useState<PreviewState>({
     status: 'building',
     html: '',
@@ -52,25 +88,51 @@ export function ClientPreview() {
     <div className="playground__previewPane">
       <div className="playground__previewHeader">
         <span>Preview</span>
-        <span className="playground__previewStatus">
-          {state.status === 'building'
-            ? 'Сборка...'
-            : state.status === 'error'
-              ? 'Ошибка'
-              : 'Готово'}
-        </span>
+        <div className="playground__previewHeaderActions">
+          <span className="playground__previewStatus">
+            {state.status === 'building'
+              ? 'Сборка...'
+              : state.status === 'error'
+                ? 'Ошибка'
+                : 'Готово'}
+          </span>
+          <button
+            type="button"
+            className="playground__btn playground__btn--ghost playground__btn--compact"
+            title="Перезагрузить превью (сохранить localStorage и sessionStorage)"
+            aria-label="Перезагрузить превью"
+            disabled={state.status === 'building' || !state.html}
+            onClick={() => reloadPreviewIframe(previewIframeRef.current)}
+          >
+            ↻
+          </button>
+          <button
+            type="button"
+            className="playground__btn playground__btn--danger playground__btn--compact"
+            title="Сбросить превью (очистить localStorage, sessionStorage и состояние React)"
+            aria-label="Сбросить превью"
+            disabled={state.status === 'building' || !state.html}
+            onClick={() =>
+              resetPreviewIframe(previewIframeRef.current, () =>
+                setResetGeneration((n) => n + 1),
+              )
+            }
+          >
+            Сброс
+          </button>
+        </div>
       </div>
       {state.error ? (
         <pre className="playground__previewError">{state.error}</pre>
       ) : null}
       <iframe
-        key={state.html}
+        ref={previewIframeRef}
+        key={`${resetGeneration}:${state.html}`}
         className="playground__previewIframe"
         title="Preview"
-        sandbox="allow-scripts allow-modals"
+        sandbox="allow-scripts allow-modals allow-same-origin"
         srcDoc={state.html}
       />
     </div>
   )
 }
-
