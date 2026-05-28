@@ -60,7 +60,7 @@ export function useExplorerFsOps({
   const deleteWorkspaceFiles = useCallback(
     (paths: string[]) => {
       const entries = paths
-        .filter((path) => sandpack.files[path])
+        .filter((path) => sandpack.files[path] !== undefined)
         .sort((a, b) => b.length - a.length)
 
       entries.forEach((path) => {
@@ -121,7 +121,7 @@ export function useExplorerFsOps({
   const moveFilePath = useCallback(
     (fromPath: string, targetParentPath: string, nextName?: string) => {
       const source = sandpack.files[fromPath]
-      if (!source) {
+      if (source === undefined) {
         return null
       }
 
