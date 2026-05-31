@@ -22,7 +22,7 @@ function seedDoc(files: Record<string, string>): Y.Doc {
 function materialize(doc: Y.Doc): Record<string, string> {
   const out: Record<string, string> = {};
   for (const path of doc.getMap<boolean>(FILES).keys()) {
-    out[path] = doc.getText(fileTextName(path)).toString();
+    out[path] = doc.getText(fileTextName(path)).toJSON();
   }
   return out;
 }
