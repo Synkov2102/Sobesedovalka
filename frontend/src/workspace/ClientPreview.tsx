@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import {
-  PreviewConsole,
-  PreviewConsoleToggle,
-} from './Console/PreviewConsole'
+import { PreviewConsole, PreviewConsoleToggle } from './Console/PreviewConsole'
 import { instrumentPreviewHtml } from './Console/previewConsoleBridge'
+import { instrumentPreviewFormatterHtml } from './Formatter/previewFormatterBridge'
+import { usePreviewFormatter } from './Formatter/usePreviewFormatter'
 import { usePreviewConsole } from './Console/usePreviewConsole'
 import { buildClientPreview } from './clientPreviewBuild'
 import { useWorkspace } from './WorkspaceContext'
@@ -63,6 +62,9 @@ export function ClientPreview() {
     html: '',
     error: '',
   })
+
+  usePreviewFormatter(previewIframeRef)
+
   const signature = useMemo(
     () =>
       Object.keys(files)
@@ -99,7 +101,10 @@ export function ClientPreview() {
   }, [files, resetConsole, signature])
 
   const previewHtml = useMemo(
-    () => (state.html ? instrumentPreviewHtml(state.html) : ''),
+    () =>
+      state.html
+        ? instrumentPreviewFormatterHtml(instrumentPreviewHtml(state.html))
+        : '',
     [state.html],
   )
 
