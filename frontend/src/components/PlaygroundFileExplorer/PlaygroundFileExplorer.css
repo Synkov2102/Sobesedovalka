@@ -8,17 +8,27 @@
 }
 
 .playground__fileExplorerHeader {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
   padding: 10px;
   border-bottom: 1px solid var(--border);
 }
 
-.playground__fileExplorerHint {
-  font-size: 12px;
-  line-height: 1.35;
-  opacity: 0.8;
+.playground__fileExplorerHeaderTitle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.playground__fileExplorerInfoBtn {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  color: var(--text);
+  opacity: 0.72;
+}
+
+.playground__fileExplorerInfoBtn:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .playground__fileTree {

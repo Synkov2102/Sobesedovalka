@@ -147,10 +147,6 @@ export function Playground({ onInvalidExplicitRoom }: PlaygroundProps) {
     <WorkspaceProvider initialFiles={mergeWorkspaceFiles()}>
       <CollabSync room={roomId} clientId={collabClientId} onRoster={onCollabRoster}>
         <div className="playground playground--fill">
-          <PlaygroundCollabBar
-            collabPeers={collabPeers}
-            selfClientId={collabClientId}
-          />
           <PeerCaretsOverlay selfId={collabClientId} peers={collabPeers} />
           <div className="playground__providerInner">
             <ResizableWorkspace>
@@ -159,6 +155,10 @@ export function Playground({ onInvalidExplicitRoom }: PlaygroundProps) {
               <ClientPreview />
             </ResizableWorkspace>
           </div>
+          <PlaygroundCollabBar
+            collabPeers={collabPeers}
+            selfClientId={collabClientId}
+          />
         </div>
       </CollabSync>
     </WorkspaceProvider>

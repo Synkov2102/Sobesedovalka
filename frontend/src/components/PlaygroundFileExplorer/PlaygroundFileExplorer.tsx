@@ -1,3 +1,5 @@
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
+import { IconButton, Tooltip } from '@mui/material'
 import { useCallback, useMemo, useState } from 'react'
 import type { MouseEvent } from 'react'
 import { useCollabFs } from '../collabFsContext'
@@ -38,6 +40,9 @@ import { renderFile as renderFileUi } from './ui/renderFile'
 import { renderFolder as renderFolderUi } from './ui/renderFolder'
 import { PlaygroundContextMenu } from './ui/PlaygroundContextMenu'
 import { FileTypeIcon } from './ui/FileTypeIcon'
+
+const FILE_EXPLORER_HINT =
+  'Кликните правой кнопкой, чтобы создавать, переименовывать и удалять файлы и папки.'
 
 export function PlaygroundFileExplorer({
   collabPeers = [],
@@ -508,12 +513,18 @@ export function PlaygroundFileExplorer({
       onContextMenu={openRootContextMenu}
     >
       <div className="playground__fileExplorerHeader">
-        <div>
+        <div className="playground__fileExplorerHeaderTitle">
           <div className="playground__label">Проводник</div>
-          <div className="playground__fileExplorerHint">
-            Кликните правой кнопкой, чтобы создавать, переименовывать и удалять
-            файлы и папки.
-          </div>
+          <Tooltip title={FILE_EXPLORER_HINT} arrow placement="top">
+            <IconButton
+              type="button"
+              size="small"
+              className="playground__fileExplorerInfoBtn"
+              aria-label={FILE_EXPLORER_HINT}
+            >
+              <InfoOutlinedIcon fontSize="inherit" />
+            </IconButton>
+          </Tooltip>
         </div>
       </div>
 

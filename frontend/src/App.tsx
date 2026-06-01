@@ -241,7 +241,7 @@ function AppMain({ user, logout }: AppMainProps) {
       <Box
         component="header"
         sx={{
-          mb: isFullScreenEditor ? 1 : 2,
+          mb: isFullScreenEditor ? 1 : 2.5,
           flexShrink: 0,
         }}
       >
@@ -255,7 +255,64 @@ function AppMain({ user, logout }: AppMainProps) {
             rowGap: 1,
           }}
         >
-          <AppBrandWordmark onNavigateHome={goBrandHome} />
+          <Stack
+            component="nav"
+            aria-label="Основная навигация"
+            direction="row"
+            spacing={1.5}
+            sx={{
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              minWidth: 0,
+              rowGap: 1,
+            }}
+          >
+            <AppBrandWordmark onNavigateHome={goBrandHome} />
+            {isSandbox ? (
+              <Button
+                variant="outlined"
+                color="primary"
+                size="small"
+                onClick={exitSandboxToRooms}
+              >
+                К комнатам
+              </Button>
+            ) : isPresetEditor ? (
+              <Button
+                variant="outlined"
+                color="primary"
+                size="small"
+                onClick={openPresetList}
+              >
+                К списку пресетов
+              </Button>
+            ) : (
+              <ToggleButtonGroup
+                exclusive
+                size="small"
+                value={mainTab}
+                onChange={(_, value: MainTab | null) => {
+                  if (value) {
+                    commitTab(value)
+                  }
+                }}
+                aria-label="Раздел приложения"
+                sx={{
+                  '& .MuiToggleButton-root': {
+                    color: 'text.primary',
+                    borderColor: 'divider',
+                    px: 1.5,
+                    '&:not(.Mui-selected):hover': {
+                      bgcolor: 'rgba(255, 255, 255, 0.06)',
+                    },
+                  },
+                }}
+              >
+                <ToggleButton value="rooms">Комнаты</ToggleButton>
+                <ToggleButton value="presets">Пресеты</ToggleButton>
+              </ToggleButtonGroup>
+            )}
+          </Stack>
           <Stack
             direction="row"
             spacing={1.5}
@@ -270,7 +327,7 @@ function AppMain({ user, logout }: AppMainProps) {
             </Typography>
             <Button
               variant="outlined"
-              color="secondary"
+              color="primary"
               size="small"
               onClick={() => logout()}
             >
@@ -278,54 +335,6 @@ function AppMain({ user, logout }: AppMainProps) {
             </Button>
           </Stack>
         </Stack>
-      </Box>
-
-      <Box
-        component="nav"
-        aria-label="Основная навигация"
-        sx={{
-          display: 'flex',
-          gap: 1,
-          mb: isFullScreenEditor ? 1 : 2.5,
-          flexWrap: 'wrap',
-          flexShrink: 0,
-          alignItems: 'center',
-        }}
-      >
-        {isSandbox ? (
-          <Button
-            variant="outlined"
-            color="secondary"
-            size="small"
-            onClick={exitSandboxToRooms}
-          >
-            К комнатам
-          </Button>
-        ) : isPresetEditor ? (
-          <Button
-            variant="outlined"
-            color="secondary"
-            size="small"
-            onClick={openPresetList}
-          >
-            К списку пресетов
-          </Button>
-        ) : (
-          <ToggleButtonGroup
-            exclusive
-            size="small"
-            value={mainTab}
-            onChange={(_, value: MainTab | null) => {
-              if (value) {
-                commitTab(value)
-              }
-            }}
-            aria-label="Раздел приложения"
-          >
-            <ToggleButton value="rooms">Комнаты</ToggleButton>
-            <ToggleButton value="presets">Пресеты</ToggleButton>
-          </ToggleButtonGroup>
-        )}
       </Box>
 
       {isSandbox ? (

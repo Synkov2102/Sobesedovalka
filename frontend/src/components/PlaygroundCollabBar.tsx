@@ -1,37 +1,11 @@
 import { useMemo } from 'react'
-import {
-  Avatar,
-  Box,
-  Button,
-  Chip,
-  Paper,
-  Stack,
-  Tooltip,
-  Typography,
-} from '@mui/material'
+import { Box, Stack, Tooltip, Typography } from '@mui/material'
 import { alpha, useTheme } from '@mui/material/styles'
 import type { CollabPeerDTO } from '../collab/collab.types'
-import { peerAccentRgbCss } from '../collab/peerColor'
 import { normalizeSandpackFilePath } from '../collab/sandpackPaths'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 
-function peerInitials(displayName: string): string {
-  const parts = displayName.trim().split(/\s+/).filter(Boolean)
-  if (parts.length >= 2) {
-    return `${parts[0].slice(0, 1)}${parts[1].slice(0, 1)}`.toUpperCase()
-  }
-  const single = parts[0] ?? displayName.trim()
-  return (single.slice(0, 2) || '?').toUpperCase()
-}
-
-function fileBasename(activeFile: string): string {
-  const path = normalizeSandpackFilePath(activeFile)
-  if (!path) {
-    return ''
-  }
-  const segments = path.split('/').filter(Boolean)
-  return segments[segments.length - 1] ?? path
-}
+const BAR_HEIGHT_PX = 20
 
 export function PlaygroundCollabBar({
   collabPeers,
@@ -59,225 +33,148 @@ export function PlaygroundCollabBar({
     return next
   }, [collabPeers, selfClientId])
 
-  const accentBg = alpha(theme.palette.primary.main, 0.06)
-
   return (
-    <Paper
-      elevation={0}
+    <Box
+      className="playground__collabBar"
       role="status"
       aria-live="polite"
       aria-label="Участники совместного редактирования"
       sx={{
         flexShrink: 0,
-        px: { xs: 1.5, sm: 2 },
-        py: 1.25,
-        mb: 1.5,
-        borderRadius: 2,
-        border: `1px solid ${theme.palette.divider}`,
-        background: `linear-gradient(135deg, ${accentBg} 0%, ${theme.palette.background.paper} 48%)`,
+        height: BAR_HEIGHT_PX,
+        minHeight: BAR_HEIGHT_PX,
+        display: 'flex',
+        alignItems: 'center',
+        px: 1,
+        borderTop: `1px solid ${theme.palette.divider}`,
+        bgcolor: alpha(theme.palette.background.paper, 0.92),
+        overflow: 'hidden',
       }}
     >
       {sortedPeers.length === 0 ? (
         <Typography
-          variant="body2"
+          variant="caption"
           color="text.secondary"
-          sx={{ py: 0.25, px: 0.5 }}
+          sx={{ fontSize: '0.65rem', lineHeight: 1, px: 0.5 }}
         >
-          Подключение к участникам…
+          Подключение…
         </Typography>
       ) : (
         <Box
           sx={{
             overflowX: 'auto',
             overflowY: 'hidden',
-            pb: 0.25,
-            mx: -0.25,
-            px: 0.25,
-            scrollbarGutter: 'stable',
+            width: '100%',
+            scrollbarWidth: 'none',
+            '&::-webkit-scrollbar': { display: 'none' },
           }}
         >
           <Stack
             direction="row"
-            spacing={1.25}
+            spacing={1.5}
             sx={{
               flexWrap: 'nowrap',
-              alignItems: 'stretch',
+              alignItems: 'center',
               width: 'max-content',
               minWidth: '100%',
+              height: BAR_HEIGHT_PX,
             }}
           >
             {sortedPeers.map((p) => {
               const path = normalizeSandpackFilePath(p.activeFile)
               const canOpen = Boolean(
-                path && workspace.files[path] !== undefined
+                path && workspace.files[path] !== undefined,
               )
-              const base = fileBasename(p.activeFile)
-              const accentCss = peerAccentRgbCss(p)
-              const contrast = theme.palette.getContrastText(accentCss)
               const isSelf = p.clientId === selfClientId
               const isAway = p.cursorAway === true
-              const awayColor = theme.palette.error.main
-              const frameColor = isAway ? awayColor : accentCss
+              const statusColor = isAway
+                ? theme.palette.error.main
+                : theme.palette.success.main
               const tooltipLines = [
                 path ? path : 'Файл не выбран',
                 `Курсор: ${p.line}:${p.col}`,
-                ...(isAway ? ['Курсор вне страницы'] : []),
-              ]
+                isAway ? 'Вне страницы' : 'На странице',
+                canOpen ? 'Нажмите, чтобы открыть файл' : undefined,
+              ].filter(Boolean)
               const tooltipTitle = tooltipLines.join('\n')
 
+              const handleClick = () => {
+                if (canOpen && path) {
+                  workspace.openFile(path)
+                }
+              }
+
               return (
-                <Paper
+                <Tooltip
                   key={p.clientId}
-                  variant="outlined"
-                  sx={{
-                    flex: '0 0 auto',
-                    maxWidth: 'min(320px, 85vw)',
-                    borderRadius: 2,
-                    borderWidth: isAway ? 2 : 1,
-                    borderColor: alpha(frameColor, isAway ? 0.85 : 0.38),
-                    bgcolor: alpha(frameColor, isAway ? 0.1 : 0.07),
-                    boxShadow: isAway
-                      ? `0 0 0 1px ${alpha(awayColor, 0.35)}, inset 3px 0 0 0 ${awayColor}`
-                      : `inset 3px 0 0 0 ${accentCss}`,
-                    transition: theme.transitions.create(
-                      ['border-color', 'box-shadow', 'background-color'],
-                      { duration: theme.transitions.duration.shortest },
-                    ),
-                  }}
+                  title={tooltipTitle}
+                  arrow
+                  placement="top"
                 >
-                  <Stack
-                    direction="row"
-                    spacing={1.25}
+                  <Box
+                    component="button"
+                    type="button"
+                    onClick={handleClick}
+                    disabled={!canOpen}
+                    aria-label={
+                      canOpen
+                        ? `Открыть файл ${path}, который смотрит ${p.displayName}`
+                        : `${p.displayName}, ${isAway ? 'вне страницы' : 'на странице'}`
+                    }
                     sx={{
-                      px: 1.25,
-                      py: 1,
-                      minWidth: 0,
+                      display: 'inline-flex',
                       alignItems: 'center',
+                      gap: 0.5,
+                      flexShrink: 0,
+                      height: BAR_HEIGHT_PX,
+                      px: 0.5,
+                      m: 0,
+                      border: 0,
+                      borderRadius: 0.5,
+                      bgcolor: 'transparent',
+                      color: 'text.primary',
+                      font: 'inherit',
+                      cursor: canOpen ? 'pointer' : 'default',
+                      opacity: canOpen ? 1 : 0.85,
+                      '&:hover:enabled': {
+                        bgcolor: alpha(theme.palette.primary.main, 0.08),
+                      },
+                      '&:disabled': {
+                        cursor: 'default',
+                      },
                     }}
                   >
-                    <Tooltip title={tooltipTitle} arrow placement="top">
-                      <Avatar
-                        sx={{
-                          width: 36,
-                          height: 36,
-                          fontSize: '0.85rem',
-                          fontWeight: 700,
-                          bgcolor: accentCss,
-                          color: contrast,
-                          flexShrink: 0,
-                          border: `1px solid ${alpha(accentCss, 0.35)}`,
-                        }}
-                        aria-hidden
-                      >
-                        {peerInitials(p.displayName)}
-                      </Avatar>
-                    </Tooltip>
-                    <Stack sx={{ minWidth: 0, flex: 1 }} spacing={0.35}>
-                      <Stack
-                        direction="row"
-                        spacing={0.75}
-                        sx={{ minWidth: 0, alignItems: 'center' }}
-                      >
-                        <Typography
-                          variant="subtitle2"
-                          component="span"
-                          noWrap
-                          sx={{ fontWeight: 650, letterSpacing: '-0.01em' }}
-                          title={p.displayName}
-                        >
-                          {p.displayName}
-                        </Typography>
-                        {isSelf ? (
-                          <Chip
-                            label="Вы"
-                            size="small"
-                            sx={{
-                              height: 22,
-                              flexShrink: 0,
-                              '& .MuiChip-label': {
-                                px: 0.85,
-                                fontSize: '0.7rem',
-                              },
-                            }}
-                          />
-                        ) : null}
-                        {isAway ? (
-                          <Chip
-                            label="Вне страницы"
-                            size="small"
-                            color="error"
-                            variant="outlined"
-                            sx={{
-                              height: 22,
-                              flexShrink: 0,
-                              '& .MuiChip-label': {
-                                px: 0.85,
-                                fontSize: '0.7rem',
-                              },
-                            }}
-                          />
-                        ) : null}
-                      </Stack>
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        noWrap
-                        sx={{
-                          fontFamily:
-                            'ui-monospace, SFMono-Regular, Consolas, monospace',
-                          letterSpacing: '0.02em',
-                        }}
-                        title={path ?? undefined}
-                      >
-                        {base || '—'} · {p.line}:{p.col}
-                      </Typography>
-                    </Stack>
-                    <Tooltip
-                      title={
-                        canOpen
-                          ? `Открыть ${path}`
-                          : path
-                            ? 'Файла нет в текущем проекте'
-                            : 'Файл не выбран'
-                      }
+                    <Box
+                      aria-hidden
+                      sx={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: '50%',
+                        flexShrink: 0,
+                        bgcolor: statusColor,
+                        boxShadow: `0 0 0 1px ${alpha(statusColor, 0.35)}`,
+                      }}
+                    />
+                    <Typography
+                      component="span"
+                      noWrap
+                      sx={{
+                        fontSize: '0.65rem',
+                        lineHeight: 1,
+                        fontWeight: isSelf ? 700 : 500,
+                        maxWidth: 140,
+                      }}
                     >
-                      <span>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          disabled={!canOpen}
-                          onClick={() => {
-                            if (canOpen && path) {
-                              workspace.openFile(path)
-                            }
-                          }}
-                          sx={{
-                            flexShrink: 0,
-                            borderRadius: 1.5,
-                            px: 1,
-                            py: 0.35,
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                            borderColor: alpha(accentCss, 0.45),
-                            color: theme.palette.text.primary,
-                            '&:hover': {
-                              borderColor: alpha(accentCss, 0.75),
-                              bgcolor: alpha(accentCss, 0.12),
-                            },
-                          }}
-                          aria-label={`Открыть файл, который смотрит ${p.displayName}`}
-                        >
-                          К файлу
-                        </Button>
-                      </span>
-                    </Tooltip>
-                  </Stack>
-                </Paper>
+                      {p.displayName}
+                      {isSelf ? ' (вы)' : ''}
+                    </Typography>
+                  </Box>
+                </Tooltip>
               )
             })}
           </Stack>
         </Box>
       )}
-    </Paper>
+    </Box>
   )
 }

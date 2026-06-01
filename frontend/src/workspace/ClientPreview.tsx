@@ -111,14 +111,14 @@ export function ClientPreview() {
   return (
     <div className="playground__previewPane">
       <div className="playground__previewHeader">
-        <span>Preview</span>
+        <span>Превью</span>
         <div className="playground__previewHeaderActions">
           <span className="playground__previewStatus">
             {state.status === 'building'
               ? 'Сборка...'
               : state.status === 'error'
-                ? 'Ошибка'
-                : 'Готово'}
+                ? 'Ошибка сборки'
+                : 'Готово к работе'}
           </span>
           <PreviewConsoleToggle
             isOpen={isConsoleOpen}
