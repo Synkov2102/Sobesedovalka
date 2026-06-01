@@ -35,14 +35,7 @@ const EXTRA_LIBS: ReadonlyArray<{ uri: string; content: string }> = [
   },
 ]
 
-let configured = false
-
 export function configureMonacoTypeScript(monaco: MonacoMountApi): void {
-  if (configured) {
-    return
-  }
-  configured = true
-
   const ts = monaco.languages.typescript
   const sharedCompilerOptions = {
     jsx: ts.JsxEmit.ReactJSX,
@@ -51,6 +44,7 @@ export function configureMonacoTypeScript(monaco: MonacoMountApi): void {
     moduleResolution: ts.ModuleResolutionKind.NodeJs,
     allowSyntheticDefaultImports: true,
     esModuleInterop: true,
+    allowJs: true,
     strict: true,
     noEmit: true,
     skipLibCheck: true,
@@ -78,7 +72,6 @@ export function configureMonacoTypeScript(monaco: MonacoMountApi): void {
   ts.typescriptDefaults.setDiagnosticsOptions(diagnosticsOptions)
   ts.javascriptDefaults.setCompilerOptions({
     ...sharedCompilerOptions,
-    allowJs: true,
     checkJs: false,
   })
   ts.javascriptDefaults.setDiagnosticsOptions(diagnosticsOptions)

@@ -12,28 +12,37 @@ import { useCollabYDoc } from '../collab/collabYDocContext'
 import { useCollabFileSync } from '../collab/collabFileSyncContext'
 import { useWorkspace } from './WorkspaceContext'
 import { setActiveMonacoEditor } from './monacoPresence'
+import { configureMonacoHtml } from './monacoHtmlEnv'
 import { configureMonacoTypeScript } from './monacoTypeScriptEnv'
 import { configureMonacoShiki, monacoThemeId } from './monacoShiki'
+import { monacoSuggestEditorOptions } from './monacoSuggestOptions'
 import {
   disposeWorkspaceModels,
   syncWorkspaceModels,
+  workspaceFileUri,
 } from './monacoWorkspaceModels'
 
-/** Monaco TS language service is wired only to `typescript` / `javascript` ids. */
+/**
+ * TS/JS/TSX/JSX share the TypeScript language service so JSX tags, props,
+ * methods, and types get the same completions.
+ */
 function languageForPath(path: string): string {
-  if (path.endsWith('.tsx') || path.endsWith('.ts')) {
+  const lower = path.toLowerCase()
+  if (
+    lower.endsWith('.tsx') ||
+    lower.endsWith('.ts') ||
+    lower.endsWith('.jsx') ||
+    lower.endsWith('.js')
+  ) {
     return 'typescript'
   }
-  if (path.endsWith('.jsx') || path.endsWith('.js')) {
-    return 'javascript'
-  }
-  if (path.endsWith('.css')) {
+  if (lower.endsWith('.css')) {
     return 'css'
   }
-  if (path.endsWith('.html')) {
+  if (lower.endsWith('.html') || lower.endsWith('.htm')) {
     return 'html'
   }
-  if (path.endsWith('.json')) {
+  if (lower.endsWith('.json')) {
     return 'json'
   }
   return 'plaintext'
@@ -57,6 +66,7 @@ export function MonacoCodeEditor() {
   const handleBeforeMount = async (monacoApi: Parameters<OnMount>[1]) => {
     await configureMonacoShiki(monacoApi)
     configureMonacoTypeScript(monacoApi)
+    configureMonacoHtml(monacoApi)
   }
 
   const bindEditor = useMemo(
@@ -186,7 +196,7 @@ export function MonacoCodeEditor() {
       </div>
       <Editor
         key={activeFile}
-        path={activeFile}
+        path={workspaceFileUri(activeFile)}
         defaultValue={value}
         language={language}
         theme={editorTheme}
@@ -203,6 +213,7 @@ export function MonacoCodeEditor() {
           fileSync?.emitFileChange(activeFile, content)
         }}
         options={{
+          ...monacoSuggestEditorOptions,
           automaticLayout: true,
           readOnly: Boolean(doc && !synced),
           readOnlyMessage: { value: 'Ожидание синхронизации комнаты...' },
@@ -227,12 +238,6 @@ export function MonacoCodeEditor() {
           },
           'semanticHighlighting.enabled': true,
           hover: { enabled: true, delay: 300 },
-          quickSuggestions: {
-            other: true,
-            comments: false,
-            strings: true,
-          },
-          parameterHints: { enabled: true },
           padding: { top: 8 },
         }}
       />
