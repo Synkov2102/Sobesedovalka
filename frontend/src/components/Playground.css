@@ -122,12 +122,10 @@
   color: #dc2626;
 }
 
-@media (prefers-color-scheme: dark) {
-  .playground__btn--danger {
-    border-color: color-mix(in srgb, #f87171 45%, var(--border));
-    background: color-mix(in srgb, #f87171 15%, transparent);
-    color: #f87171;
-  }
+html[data-app-theme='dark'] .playground__btn--danger {
+  border-color: color-mix(in srgb, #f87171 45%, var(--border));
+  background: color-mix(in srgb, #f87171 15%, transparent);
+  color: #f87171;
 }
 
 .playground__workspace {
@@ -266,7 +264,8 @@
   min-height: 0;
   width: 100%;
   border: none;
-  background: #fff;
+  background: var(--preview-canvas-bg);
+  color-scheme: light dark;
 }
 
 .playground__workspace--resizable.playground__workspace--stacked {

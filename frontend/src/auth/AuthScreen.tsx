@@ -13,6 +13,7 @@ import {
 import { useAuth } from './useAuth'
 import { appShellPageSx, sectionSurfacePaddingSx } from '../theme/layout'
 import { AppBrandWordmark } from '../components/AppBrandWordmark'
+import { ThemeModeToggle } from '../components/ThemeModeToggle'
 import { PasswordAuthForm } from './PasswordAuthForm'
 import { useOAuthPublicConfig } from './useOAuthPublicConfig'
 import { useYandexOAuthCallback } from './useYandexOAuthCallback'
@@ -78,7 +79,13 @@ export function AuthScreen() {
   return (
     <Box sx={appShellPageSx}>
       <Box component="header" sx={{ mb: 3 }}>
-        <AppBrandWordmark />
+        <Stack
+          direction="row"
+          sx={{ alignItems: 'center', justifyContent: 'space-between' }}
+        >
+          <AppBrandWordmark />
+          <ThemeModeToggle />
+        </Stack>
         <Typography
           variant="h5"
           component="h1"

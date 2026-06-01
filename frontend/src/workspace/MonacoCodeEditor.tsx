@@ -62,12 +62,27 @@ export function MonacoCodeEditor() {
   const value = workspace.files[activeFile] ?? ''
   const language = useMemo(() => languageForPath(activeFile), [activeFile])
   const editorTheme = monacoThemeId(theme.palette.mode === 'dark' ? 'dark' : 'light')
+  const editorThemeRef = useRef(editorTheme)
+  editorThemeRef.current = editorTheme
+
+  const applyEditorTheme = (monacoApi: Parameters<OnMount>[1]) => {
+    monacoApi.editor.setTheme(editorThemeRef.current)
+  }
 
   const handleBeforeMount = async (monacoApi: Parameters<OnMount>[1]) => {
     await configureMonacoShiki(monacoApi)
     configureMonacoTypeScript(monacoApi)
     configureMonacoHtml(monacoApi)
+    applyEditorTheme(monacoApi)
   }
+
+  useEffect(() => {
+    const monacoApi = monacoApiRef.current
+    if (!monacoApi) {
+      return
+    }
+    applyEditorTheme(monacoApi)
+  }, [editorTheme])
 
   const bindEditor = useMemo(
     () => () => {
@@ -141,6 +156,7 @@ export function MonacoCodeEditor() {
   const handleMount: OnMount = (editor, monacoApi) => {
     monacoApiRef.current = monacoApi
     editorRef.current = editor
+    applyEditorTheme(monacoApi)
     setActiveMonacoEditor(editor)
     syncWorkspaceModels(monacoApi, workspace.files, {
       activePath: activeFile,

@@ -285,9 +285,7 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   background: color-mix(in srgb, var(--code-bg) 92%, var(--bg));
-  box-shadow:
-    0 10px 30px rgb(0 0 0 / 0.22),
-    0 2px 8px rgb(0 0 0 / 0.12);
+  box-shadow: var(--shadow);
 }
 
 .playground__contextMenuItem {

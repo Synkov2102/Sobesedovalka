@@ -4,7 +4,9 @@ import { instrumentPreviewHtml } from './Console/previewConsoleBridge'
 import { instrumentPreviewFormatterHtml } from './Formatter/previewFormatterBridge'
 import { usePreviewFormatter } from './Formatter/usePreviewFormatter'
 import { usePreviewConsole } from './Console/usePreviewConsole'
+import { useThemeMode } from '../theme/ThemeModeProvider'
 import { buildClientPreview } from './clientPreviewBuild'
+import { injectPreviewHostTheme } from './injectPreviewHostTheme'
 import { useWorkspace } from './WorkspaceContext'
 
 type PreviewState =
@@ -47,6 +49,7 @@ function resetPreviewIframe(
 }
 
 export function ClientPreview() {
+  const { mode } = useThemeMode()
   const { files } = useWorkspace()
   const previewIframeRef = useRef<HTMLIFrameElement>(null)
   const [resetGeneration, setResetGeneration] = useState(0)
@@ -100,13 +103,15 @@ export function ClientPreview() {
     }
   }, [files, resetConsole, signature])
 
-  const previewHtml = useMemo(
-    () =>
-      state.html
-        ? instrumentPreviewFormatterHtml(instrumentPreviewHtml(state.html))
-        : '',
-    [state.html],
-  )
+  const previewHtml = useMemo(() => {
+    if (!state.html) {
+      return ''
+    }
+    const built = instrumentPreviewFormatterHtml(
+      instrumentPreviewHtml(state.html),
+    )
+    return injectPreviewHostTheme(built, mode)
+  }, [state.html, mode])
 
   return (
     <div className="playground__previewPane">

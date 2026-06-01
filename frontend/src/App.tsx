@@ -18,6 +18,7 @@ import {
 import { useAuth } from './auth/useAuth'
 import { AuthScreen } from './auth/AuthScreen'
 import { AppBrandWordmark } from './components/AppBrandWordmark'
+import { ThemeModeToggle } from './components/ThemeModeToggle'
 import { RoomsPanel } from './components/RoomsPanel'
 import { PresetCreatePage } from './components/presets/PresetCreatePage'
 import { PresetEditPage } from './components/presets/PresetEditPage'
@@ -303,7 +304,7 @@ function AppMain({ user, logout }: AppMainProps) {
                     borderColor: 'divider',
                     px: 1.5,
                     '&:not(.Mui-selected):hover': {
-                      bgcolor: 'rgba(255, 255, 255, 0.06)',
+                      bgcolor: 'action.hover',
                     },
                   },
                 }}
@@ -322,6 +323,7 @@ function AppMain({ user, logout }: AppMainProps) {
               ml: { xs: 0, sm: 'auto' },
             }}
           >
+            <ThemeModeToggle />
             <Typography variant="body2" color="text.secondary">
               {accountLabel}
             </Typography>
@@ -419,7 +421,13 @@ function App() {
     return (
       <Box sx={appShellPageSx}>
         <Box component="header" sx={{ mb: 2 }}>
-          <AppBrandWordmark />
+          <Stack
+            direction="row"
+            sx={{ alignItems: 'center', justifyContent: 'space-between' }}
+          >
+            <AppBrandWordmark />
+            <ThemeModeToggle />
+          </Stack>
         </Box>
         <Typography color="text.secondary">Загрузка сессии…</Typography>
       </Box>

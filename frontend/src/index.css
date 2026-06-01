@@ -1,4 +1,4 @@
-/* Глобальные переменные под тёмную тему и компоненты вне MUI. */
+/* Значения по умолчанию (тёмная тема) до applyAppCssVars; далее — theme/appCssVars.ts */
 :root {
   --text: #a8abb3;
   --text-h: #eceef4;
@@ -11,6 +11,10 @@
   --social-bg: rgba(35, 37, 46, 0.65);
   --shadow:
     rgba(0, 0, 0, 0.45) 0 10px 15px -3px, rgba(0, 0, 0, 0.28) 0 4px 6px -2px;
+  --preview-canvas-bg: #2a2d36;
+  --preview-chrome-mix: #000000;
+  --page-bg: #131418;
+  color-scheme: dark;
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
@@ -18,9 +22,8 @@
 
   font: 18px/145% var(--sans);
   letter-spacing: 0.18px;
-  color-scheme: dark;
   color: var(--text);
-  background: #131418;
+  background: var(--page-bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;

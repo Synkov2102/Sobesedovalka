@@ -1,4 +1,4 @@
-import { createTheme } from '@mui/material/styles'
+import { createTheme, type PaletteMode } from '@mui/material/styles'
 
 /** Кислотно-оранжевый акцент (CTA, активные табы). */
 export const acidOrange = {
@@ -17,9 +17,22 @@ export const slate = {
   heading: '#eceef4',
 } as const
 
-export const appTheme = createTheme({
-  palette: {
-    mode: 'dark',
+/** Светлая база интерфейса. */
+export const lightSlate = {
+  bg: '#f0f1f4',
+  paper: '#ffffff',
+  elevated: '#e8eaef',
+  border: '#d4d7e0',
+  muted: '#5c616d',
+  heading: '#1a1c22',
+} as const
+
+function paletteForMode(mode: PaletteMode) {
+  const isDark = mode === 'dark'
+  const colors = isDark ? slate : lightSlate
+
+  return {
+    mode,
     primary: {
       main: acidOrange.main,
       light: acidOrange.light,
@@ -27,113 +40,128 @@ export const appTheme = createTheme({
       contrastText: '#0e0f12',
     },
     secondary: {
-      main: '#5c616d',
-      light: '#757a87',
-      dark: '#454952',
-      contrastText: slate.heading,
+      main: isDark ? '#5c616d' : '#757a87',
+      light: isDark ? '#757a87' : '#9298a6',
+      dark: isDark ? '#454952' : '#5c616d',
+      contrastText: colors.heading,
     },
     background: {
-      default: slate.bg,
-      paper: slate.paper,
+      default: colors.bg,
+      paper: colors.paper,
     },
     text: {
-      primary: slate.heading,
-      secondary: slate.muted,
+      primary: colors.heading,
+      secondary: colors.muted,
     },
-    divider: slate.border,
+    divider: colors.border,
     error: {
       main: '#f87171',
     },
     success: {
       main: '#4ade80',
     },
-  },
-  shape: {
-    borderRadius: 10,
-  },
-  typography: {
-    fontFamily: [
-      'system-ui',
-      'Segoe UI',
-      'Roboto',
-      'Helvetica',
-      'Arial',
-      'sans-serif',
-    ].join(','),
-    h1: {
-      fontWeight: 600,
-      letterSpacing: '-0.02em',
+  } as const
+}
+
+export function createAppTheme(mode: PaletteMode) {
+  const isDark = mode === 'dark'
+  const colors = isDark ? slate : lightSlate
+  const selectedToggleBg = isDark
+    ? 'rgba(255, 119, 0, 0.12)'
+    : 'rgba(255, 119, 0, 0.1)'
+  const selectedToggleHoverBg = isDark
+    ? 'rgba(255, 119, 0, 0.18)'
+    : 'rgba(255, 119, 0, 0.16)'
+
+  return createTheme({
+    palette: paletteForMode(mode),
+    shape: {
+      borderRadius: 10,
     },
-    h2: {
-      fontWeight: 600,
-      fontSize: '1.25rem',
-    },
-    h3: {
-      fontWeight: 600,
-      fontSize: '1.05rem',
-    },
-    button: {
-      textTransform: 'none',
-      fontWeight: 600,
-    },
-  },
-  components: {
-    MuiCssBaseline: {
-      styleOverrides: {
-        body: {
-          backgroundColor: slate.bg,
-        },
+    typography: {
+      fontFamily: [
+        'system-ui',
+        'Segoe UI',
+        'Roboto',
+        'Helvetica',
+        'Arial',
+        'sans-serif',
+      ].join(','),
+      h1: {
+        fontWeight: 600,
+        letterSpacing: '-0.02em',
+      },
+      h2: {
+        fontWeight: 600,
+        fontSize: '1.25rem',
+      },
+      h3: {
+        fontWeight: 600,
+        fontSize: '1.05rem',
+      },
+      button: {
+        textTransform: 'none',
+        fontWeight: 600,
       },
     },
-    /** Сброс голубого фона автозаполнения Chrome/Safari/Edge (-webkit-autofill). */
-    MuiInputBase: {
-      styleOverrides: {
-        root: ({ theme }) => {
-          const bg = theme.palette.background.paper
-          const fg = theme.palette.text.primary
-          const autofill = {
-            WebkitBoxShadow: `0 0 0 1000px ${bg} inset`,
-            WebkitTextFillColor: fg,
-            caretColor: fg,
-            transition: 'background-color 99999s ease-out 0s',
-          }
-          return {
-            '& .MuiInputBase-input:-webkit-autofill': autofill,
-            '& .MuiInputBase-input:-webkit-autofill:hover': autofill,
-            '& .MuiInputBase-input:-webkit-autofill:focus': autofill,
-            '& .MuiInputBase-input:-webkit-autofill:active': autofill,
-          }
-        },
-      },
-    },
-    MuiButton: {
-      defaultProps: {
-        disableElevation: true,
-      },
-    },
-    MuiPaper: {
-      styleOverrides: {
-        root: {
-          backgroundImage: 'none',
-        },
-      },
-    },
-    MuiToggleButton: {
-      styleOverrides: {
-        root: {
-          textTransform: 'none',
-          fontWeight: 600,
-          borderColor: slate.border,
-          '&.Mui-selected': {
-            color: acidOrange.main,
-            backgroundColor: 'rgba(255, 119, 0, 0.12)',
-            borderColor: `${acidOrange.main} !important`,
-            '&:hover': {
-              backgroundColor: 'rgba(255, 119, 0, 0.18)',
-            },
+    components: {
+      MuiCssBaseline: {
+        styleOverrides: {
+          body: {
+            backgroundColor: colors.bg,
           },
         },
       },
+      /** Сброс голубого фона автозаполнения Chrome/Safari/Edge (-webkit-autofill). */
+      MuiInputBase: {
+        styleOverrides: {
+          root: ({ theme }) => {
+            const bg = theme.palette.background.paper
+            const fg = theme.palette.text.primary
+            const autofill = {
+              WebkitBoxShadow: `0 0 0 1000px ${bg} inset`,
+              WebkitTextFillColor: fg,
+              caretColor: fg,
+              transition: 'background-color 99999s ease-out 0s',
+            }
+            return {
+              '& .MuiInputBase-input:-webkit-autofill': autofill,
+              '& .MuiInputBase-input:-webkit-autofill:hover': autofill,
+              '& .MuiInputBase-input:-webkit-autofill:focus': autofill,
+              '& .MuiInputBase-input:-webkit-autofill:active': autofill,
+            }
+          },
+        },
+      },
+      MuiButton: {
+        defaultProps: {
+          disableElevation: true,
+        },
+      },
+      MuiPaper: {
+        styleOverrides: {
+          root: {
+            backgroundImage: 'none',
+          },
+        },
+      },
+      MuiToggleButton: {
+        styleOverrides: {
+          root: ({ theme }) => ({
+            textTransform: 'none',
+            fontWeight: 600,
+            borderColor: theme.palette.divider,
+            '&.Mui-selected': {
+              color: acidOrange.main,
+              backgroundColor: selectedToggleBg,
+              borderColor: `${acidOrange.main} !important`,
+              '&:hover': {
+                backgroundColor: selectedToggleHoverBg,
+              },
+            },
+          }),
+        },
+      },
     },
-  },
-})
+  })
+}
