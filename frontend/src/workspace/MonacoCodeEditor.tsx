@@ -2,8 +2,11 @@ import Editor, { type OnMount } from '@monaco-editor/react'
 import { useTheme } from '@mui/material/styles'
 import { useEffect, useMemo, useRef } from 'react'
 import type * as monaco from 'monaco-editor'
-import type * as Y from 'yjs'
-import { getYFileText, replaceYText } from '../collab/collabYjsModel'
+import { getYFileText } from '../collab/collabYjsModel'
+import {
+  bindMonacoModelToYText,
+  type MonacoYjsBindingHandle,
+} from '../collab/monacoYjsBinding'
 import { useCollabPaste } from '../components/collabPasteContext'
 import { useCollabYDoc } from '../collab/collabYDocContext'
 import { useCollabFileSync } from '../collab/collabFileSyncContext'
@@ -44,9 +47,8 @@ export function MonacoCodeEditor() {
   const fileSync = useCollabFileSync()
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
   const monacoApiRef = useRef<Parameters<OnMount>[1] | null>(null)
-  const bindingCleanupRef = useRef<(() => void) | null>(null)
+  const yjsBindingRef = useRef<MonacoYjsBindingHandle | null>(null)
   const applyingWorkspaceRef = useRef(false)
-  const applyingYjsRef = useRef(false)
   const activeFile = workspace.activeFile
   const value = workspace.files[activeFile] ?? ''
   const language = useMemo(() => languageForPath(activeFile), [activeFile])
@@ -61,76 +63,13 @@ export function MonacoCodeEditor() {
     () => () => {
       const editor = editorRef.current
       const model = editor?.getModel()
-      bindingCleanupRef.current?.()
-      bindingCleanupRef.current = null
+      yjsBindingRef.current?.destroy()
+      yjsBindingRef.current = null
       if (!doc || !synced || !editor || !model || !activeFile) {
         return
       }
       const yText = getYFileText(doc, activeFile)
-
-      const syncModelToYText = () => {
-        const yValue = yText.toJSON()
-        if (model.getValue() === yValue) {
-          return
-        }
-        applyingYjsRef.current = true
-        try {
-          model.setValue(yValue)
-        } finally {
-          applyingYjsRef.current = false
-        }
-      }
-
-      const onYTextChange = (event: Y.YTextEvent, transaction: Y.Transaction) => {
-        if (transaction.origin === 'monaco-editor') {
-          return
-        }
-        applyingYjsRef.current = true
-        try {
-          let index = 0
-          const edits: monaco.editor.IIdentifiedSingleEditOperation[] = []
-          for (const op of event.delta) {
-            if (op.retain !== undefined) {
-              index += op.retain
-            } else if (op.insert !== undefined) {
-              const pos = model.getPositionAt(index)
-              edits.push({
-                range: {
-                  startLineNumber: pos.lineNumber,
-                  startColumn: pos.column,
-                  endLineNumber: pos.lineNumber,
-                  endColumn: pos.column,
-                },
-                text: String(op.insert),
-              })
-              index += String(op.insert).length
-            } else if (op.delete !== undefined) {
-              const start = model.getPositionAt(index)
-              const end = model.getPositionAt(index + op.delete)
-              edits.push({
-                range: {
-                  startLineNumber: start.lineNumber,
-                  startColumn: start.column,
-                  endLineNumber: end.lineNumber,
-                  endColumn: end.column,
-                },
-                text: '',
-              })
-            }
-          }
-          if (edits.length > 0) {
-            model.applyEdits(edits)
-          }
-        } finally {
-          applyingYjsRef.current = false
-        }
-      }
-
-      yText.observe(onYTextChange)
-      syncModelToYText()
-      bindingCleanupRef.current = () => {
-        yText.unobserve(onYTextChange)
-      }
+      yjsBindingRef.current = bindMonacoModelToYText({ yText, model, editor })
     },
     [activeFile, doc, synced],
   )
@@ -138,8 +77,8 @@ export function MonacoCodeEditor() {
   useEffect(() => {
     bindEditor()
     return () => {
-      bindingCleanupRef.current?.()
-      bindingCleanupRef.current = null
+      yjsBindingRef.current?.destroy()
+      yjsBindingRef.current = null
     }
   }, [bindEditor])
 
@@ -254,22 +193,12 @@ export function MonacoCodeEditor() {
         beforeMount={handleBeforeMount}
         onMount={handleMount}
         onChange={(next) => {
-          if (
-            !activeFile ||
-            applyingWorkspaceRef.current ||
-            applyingYjsRef.current
-          ) {
+          if (!activeFile || applyingWorkspaceRef.current) {
             return
           }
           const content = next ?? ''
-          workspace.updateWorkspaceFile(activeFile, content)
-          if (doc && synced) {
-            const yText = getYFileText(doc, activeFile)
-            if (yText.toJSON() !== content) {
-              doc.transact(() => {
-                replaceYText(yText, content)
-              }, 'monaco-editor')
-            }
+          if (!doc || !synced) {
+            workspace.updateWorkspaceFile(activeFile, content)
           }
           fileSync?.emitFileChange(activeFile, content)
         }}
