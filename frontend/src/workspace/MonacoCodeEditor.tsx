@@ -10,11 +10,16 @@ import {
 import { useCollabPaste } from '../components/collabPasteContext'
 import { useCollabYDoc } from '../collab/collabYDocContext'
 import { useCollabFileSync } from '../collab/collabFileSyncContext'
+import {
+  EditorPreferencesProvider,
+  useEditorPreferences,
+} from './EditorPreferencesContext'
+import { EditorSettingsControls } from './EditorSettingsControls'
 import { useWorkspace } from './WorkspaceContext'
 import { setActiveMonacoEditor } from './monacoPresence'
 import { configureMonacoHtml } from './monacoHtmlEnv'
 import { configureMonacoTypeScript } from './monacoTypeScriptEnv'
-import { configureMonacoShiki, monacoThemeId } from './monacoShiki'
+import { configureMonacoShiki } from './monacoShiki'
 import { monacoSuggestEditorOptions } from './monacoSuggestOptions'
 import {
   disposeWorkspaceModels,
@@ -50,6 +55,15 @@ function languageForPath(path: string): string {
 
 export function MonacoCodeEditor() {
   const theme = useTheme()
+  return (
+    <EditorPreferencesProvider appMode={theme.palette.mode}>
+      <MonacoCodeEditorInner />
+    </EditorPreferencesProvider>
+  )
+}
+
+function MonacoCodeEditorInner() {
+  const { monacoThemeId: editorTheme, font } = useEditorPreferences()
   const workspace = useWorkspace()
   const { doc, synced } = useCollabYDoc()
   const paste = useCollabPaste()
@@ -61,7 +75,6 @@ export function MonacoCodeEditor() {
   const activeFile = workspace.activeFile
   const value = workspace.files[activeFile] ?? ''
   const language = useMemo(() => languageForPath(activeFile), [activeFile])
-  const editorTheme = monacoThemeId(theme.palette.mode === 'dark' ? 'dark' : 'light')
   const editorThemeRef = useRef(editorTheme)
   editorThemeRef.current = editorTheme
 
@@ -83,6 +96,13 @@ export function MonacoCodeEditor() {
     }
     applyEditorTheme(monacoApi)
   }, [editorTheme])
+
+  useEffect(() => {
+    editorRef.current?.updateOptions({
+      fontFamily: font.family,
+      fontLigatures: font.ligatures,
+    })
+  }, [font])
 
   const bindEditor = useMemo(
     () => () => {
@@ -157,6 +177,10 @@ export function MonacoCodeEditor() {
     monacoApiRef.current = monacoApi
     editorRef.current = editor
     applyEditorTheme(monacoApi)
+    editor.updateOptions({
+      fontFamily: font.family,
+      fontLigatures: font.ligatures,
+    })
     setActiveMonacoEditor(editor)
     syncWorkspaceModels(monacoApi, workspace.files, {
       activePath: activeFile,
@@ -209,6 +233,7 @@ export function MonacoCodeEditor() {
     <div className="playground__editorPane">
       <div className="playground__editorTabs">
         <span className="playground__editorTab is-active">{activeFile}</span>
+        <EditorSettingsControls />
       </div>
       <Editor
         key={activeFile}
@@ -235,9 +260,8 @@ export function MonacoCodeEditor() {
           readOnlyMessage: { value: 'Ожидание синхронизации комнаты...' },
           minimap: { enabled: false },
           fontSize: 14,
-          fontFamily:
-            'Cascadia Code, Consolas, "Courier New", monospace',
-          fontLigatures: true,
+          fontFamily: font.family,
+          fontLigatures: font.ligatures,
           tabSize: 2,
           scrollBeyondLastLine: false,
           wordWrap: 'on',
@@ -260,4 +284,3 @@ export function MonacoCodeEditor() {
     </div>
   )
 }
-

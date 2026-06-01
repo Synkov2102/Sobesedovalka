@@ -1,6 +1,6 @@
 import type { Dispatch, MouseEvent, ReactNode, SetStateAction } from 'react'
 import type { CollabPeerDTO } from '../../../collab/collab.types'
-import { peerAccentRgbCss, peerAccentRgbaCss } from '../../../collab/peerColor'
+import { peerAccentRgbCss } from '../../../collab/peerColor'
 import type {
   ContextMenuTarget,
   DragItem,
@@ -114,14 +114,12 @@ export function renderFile({
 
   function renderPeerDot(p: CollabPeerDTO) {
     const fill = peerAccentRgbCss(p)
-    const ring = peerAccentRgbaCss(p, 0.42)
     return (
       <span
         key={p.clientId}
         className="playground__filePeerDot"
         style={{
           background: fill,
-          boxShadow: `0 0 0 1px ${ring}`,
         }}
         title={p.displayName}
       />

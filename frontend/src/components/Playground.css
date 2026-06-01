@@ -220,6 +220,7 @@ html[data-app-theme='dark'] .playground__btn--danger {
 }
 
 .playground__editorTab {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -227,6 +228,23 @@ html[data-app-theme='dark'] .playground__btn--danger {
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 12px;
   color: var(--text-h);
+}
+
+.playground__editorSettings {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.playground__editorSetting .MuiInputBase-root {
+  font-size: 12px;
+  height: 28px;
+}
+
+.playground__editorSetting .MuiSelect-select {
+  padding: 4px 28px 4px 8px !important;
+  min-height: 0 !important;
 }
 
 .playground__emptyEditor {

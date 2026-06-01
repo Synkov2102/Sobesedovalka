@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Box, Chip, Stack, Tooltip, Typography } from '@mui/material'
 import { alpha, useTheme } from '@mui/material/styles'
 import type { CollabPeerDTO } from '../collab/collab.types'
-import { peerAccentRgbCss, peerAccentRgbaCss } from '../collab/peerColor'
+import { peerAccentRgbCss } from '../collab/peerColor'
 import { normalizeSandpackFilePath } from '../collab/sandpackPaths'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 
@@ -156,7 +156,6 @@ export function PlaygroundCollabBar({
                         borderRadius: '50%',
                         flexShrink: 0,
                         bgcolor: accentCss,
-                        boxShadow: `0 0 0 1px ${peerAccentRgbaCss(p, 0.45)}`,
                       }}
                     />
                     <Typography
