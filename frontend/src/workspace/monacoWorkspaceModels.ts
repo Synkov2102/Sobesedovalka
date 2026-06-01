@@ -9,11 +9,17 @@ function isTypecheckableWorkspaceFile(path: string): boolean {
   return /\.(tsx?|jsx?)$/i.test(path)
 }
 
+/** Stable `file://` URI shared by the editor and the TypeScript language service. */
+export function workspaceFileUri(path: string): string {
+  const normalized = normalizeWorkspacePath(path)
+  return normalized ? `file://${normalized}` : ''
+}
+
 export function workspaceModelUri(
   monaco: MonacoMountApi,
   filePath: string,
 ): ReturnType<MonacoMountApi['Uri']['parse']> {
-  return monaco.Uri.parse(normalizeWorkspacePath(filePath))
+  return monaco.Uri.parse(workspaceFileUri(filePath))
 }
 
 export function syncWorkspaceModels(

@@ -1,4 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { PreviewConsole, PreviewConsoleToggle } from './Console/PreviewConsole'
+import { instrumentPreviewHtml } from './Console/previewConsoleBridge'
+import { instrumentPreviewFormatterHtml } from './Formatter/previewFormatterBridge'
+import { usePreviewFormatter } from './Formatter/usePreviewFormatter'
+import { usePreviewConsole } from './Console/usePreviewConsole'
 import { buildClientPreview } from './clientPreviewBuild'
 import { useWorkspace } from './WorkspaceContext'
 
@@ -45,11 +50,21 @@ export function ClientPreview() {
   const { files } = useWorkspace()
   const previewIframeRef = useRef<HTMLIFrameElement>(null)
   const [resetGeneration, setResetGeneration] = useState(0)
+  const {
+    consoleEntries,
+    isConsoleOpen,
+    clearConsole,
+    resetConsole,
+    toggleConsole,
+  } = usePreviewConsole(previewIframeRef)
   const [state, setState] = useState<PreviewState>({
     status: 'building',
     html: '',
     error: '',
   })
+
+  usePreviewFormatter(previewIframeRef)
+
   const signature = useMemo(
     () =>
       Object.keys(files)
@@ -63,6 +78,7 @@ export function ClientPreview() {
     let cancelled = false
     const timer = window.setTimeout(() => {
       setState((prev) => ({ ...prev, status: 'building', error: '' }))
+      resetConsole()
       void buildClientPreview(files).then((result) => {
         if (cancelled) {
           return
@@ -82,7 +98,15 @@ export function ClientPreview() {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [files, signature])
+  }, [files, resetConsole, signature])
+
+  const previewHtml = useMemo(
+    () =>
+      state.html
+        ? instrumentPreviewFormatterHtml(instrumentPreviewHtml(state.html))
+        : '',
+    [state.html],
+  )
 
   return (
     <div className="playground__previewPane">
@@ -96,6 +120,10 @@ export function ClientPreview() {
                 ? 'Ошибка'
                 : 'Готово'}
           </span>
+          <PreviewConsoleToggle
+            isOpen={isConsoleOpen}
+            onToggle={toggleConsole}
+          />
           <button
             type="button"
             className="playground__btn playground__btn--ghost playground__btn--compact"
@@ -127,12 +155,15 @@ export function ClientPreview() {
       ) : null}
       <iframe
         ref={previewIframeRef}
-        key={`${resetGeneration}:${state.html}`}
+        key={`${resetGeneration}:${previewHtml}`}
         className="playground__previewIframe"
         title="Preview"
         sandbox="allow-scripts allow-modals allow-same-origin"
-        srcDoc={state.html}
+        srcDoc={previewHtml}
       />
+      {isConsoleOpen ? (
+        <PreviewConsole entries={consoleEntries} onClear={clearConsole} />
+      ) : null}
     </div>
   )
 }

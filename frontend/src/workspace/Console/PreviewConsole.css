@@ -1,0 +1,65 @@
+.playground__previewConsole {
+  flex: 0 0 min(34%, 260px);
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--code-bg) 92%, #000);
+  color: var(--text-h);
+}
+
+.playground__previewConsoleHeader {
+  flex-shrink: 0;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.playground__previewConsoleBody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 10px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.playground__previewConsoleEmpty {
+  color: var(--text);
+}
+
+.playground__previewConsoleLine {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 8px;
+  padding: 2px 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.playground__previewConsoleLevel {
+  color: var(--text);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.playground__previewConsoleLine--warn .playground__previewConsoleLevel {
+  color: #fbbf24;
+}
+
+.playground__previewConsoleLine--error .playground__previewConsoleLevel {
+  color: #f87171;
+}
+
+.playground__previewConsoleLine--info .playground__previewConsoleLevel,
+.playground__previewConsoleLine--debug .playground__previewConsoleLevel {
+  color: #60a5fa;
+}

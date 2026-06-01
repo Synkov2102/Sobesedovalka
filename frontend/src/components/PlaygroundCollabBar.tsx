@@ -108,7 +108,9 @@ export function PlaygroundCollabBar({
           >
             {sortedPeers.map((p) => {
               const path = normalizeSandpackFilePath(p.activeFile)
-              const canOpen = Boolean(path && workspace.files[path])
+              const canOpen = Boolean(
+                path && workspace.files[path] !== undefined
+              )
               const base = fileBasename(p.activeFile)
               const accentCss = peerAccentRgbCss(p)
               const contrast = theme.palette.getContrastText(accentCss)
