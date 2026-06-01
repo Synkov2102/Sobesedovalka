@@ -5,6 +5,16 @@ export type AuthContextValue = {
   user: AuthUser | null
   /** True after initial check of stored token. */
   ready: boolean
+  loginWithVk: (params: {
+    code: string
+    deviceId: string
+    state: string
+  }) => Promise<void>
+  loginWithYandex: (params: {
+    code: string
+    codeVerifier: string
+    state?: string
+  }) => Promise<void>
   login: (login: string, password: string) => Promise<void>
   register: (params: {
     email: string

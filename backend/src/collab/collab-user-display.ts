@@ -12,6 +12,10 @@ export function collabPublicDisplayName(doc: UserDoc | null): string | null {
   if (!doc) {
     return null;
   }
+  const name = doc.displayName?.trim();
+  if (name) {
+    return sanitizeCollabDisplayName(name);
+  }
   const email = doc.email?.trim();
   if (email) {
     const at = email.indexOf('@');

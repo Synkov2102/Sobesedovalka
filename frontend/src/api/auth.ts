@@ -51,6 +51,39 @@ export async function postAuthLogin(body: {
   return (await res.json()) as AuthLoginResponse
 }
 
+export async function postAuthYandex(body: {
+  code: string
+  codeVerifier: string
+  state?: string
+}): Promise<AuthLoginResponse> {
+  const res = await fetch(`${API_PREFIX}/auth/yandex`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    throw new Error(await readApiError(res))
+  }
+  return (await res.json()) as AuthLoginResponse
+}
+
+export async function postAuthVk(body: {
+  code: string
+  deviceId: string
+  codeVerifier: string
+  state?: string
+}): Promise<AuthLoginResponse> {
+  const res = await fetch(`${API_PREFIX}/auth/vk`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    throw new Error(await readApiError(res))
+  }
+  return (await res.json()) as AuthLoginResponse
+}
+
 export async function fetchMe(): Promise<AuthUser> {
   const res = await apiFetch('/auth/me')
   if (!res.ok) {

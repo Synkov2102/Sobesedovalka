@@ -1,83 +1,80 @@
-import { type FormEvent, useState } from 'react'
+import { useCallback, useState } from 'react'
 import {
   Alert,
   Box,
   Button,
+  Collapse,
+  Divider,
   Paper,
   Stack,
-  TextField,
-  ToggleButton,
-  ToggleButtonGroup,
   Typography,
 } from '@mui/material'
 import { useAuth } from './useAuth'
 import { appShellPageSx, sectionSurfacePaddingSx } from '../theme/layout'
 import { AppBrandWordmark } from '../components/AppBrandWordmark'
+import { PasswordAuthForm } from './PasswordAuthForm'
+import { useYandexOAuthCallback } from './useYandexOAuthCallback'
+import { VkOneTapLogin } from './VkOneTapLogin'
+import { YandexLoginButton } from './YandexLoginButton'
+import { vkAppId } from './vkPkce'
+import { yandexClientId } from './yandexOAuth'
 
-type Mode = 'login' | 'register'
+type VkAuthPayload = {
+  code: string
+  device_id: string
+  state: string
+}
 
 export function AuthScreen() {
-  const { login, register, authError, clearAuthError } = useAuth()
-  const [mode, setMode] = useState<Mode>('login')
-  const [loginField, setLoginField] = useState('')
-  const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
-  const [password, setPassword] = useState('')
+  const { loginWithVk, authError, clearAuthError } = useAuth()
   const [busy, setBusy] = useState(false)
   const [localError, setLocalError] = useState<string | null>(null)
+  const [showPasswordAuth, setShowPasswordAuth] = useState(false)
 
-  function switchMode(next: Mode) {
-    setMode(next)
-    clearAuthError()
-    setLocalError(null)
-  }
-
-  async function onLogin(e: FormEvent) {
-    e.preventDefault()
-    const l = loginField.trim()
-    if (!l || !password || busy) {
-      return
-    }
-    setBusy(true)
-    setLocalError(null)
-    clearAuthError()
-    try {
-      await login(l, password)
-    } catch {
-      // authError set in context
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function onRegister(e: FormEvent) {
-    e.preventDefault()
-    if (!password.trim() || busy) {
-      return
-    }
-    const eTrim = email.trim()
-    const pTrim = phone.trim()
-    if (!eTrim && !pTrim) {
-      setLocalError('Укажите почту или номер телефона')
-      return
-    }
-    if (password.length < 8) {
-      setLocalError('Пароль не короче 8 символов')
-      return
-    }
-    setBusy(true)
-    setLocalError(null)
-    clearAuthError()
-    try {
-      await register({ email, phone, password })
-    } catch {
-      // authError in context
-    } finally {
-      setBusy(false)
-    }
-  }
-
+  const appId = vkAppId()
+  const yandexId = yandexClientId()
   const displayError = localError ?? authError
+
+  useYandexOAuthCallback((message) => setLocalError(message))
+
+  const handleVkSuccess = useCallback(
+    async (payload: VkAuthPayload) => {
+      if (busy) {
+        return
+      }
+      setBusy(true)
+      setLocalError(null)
+      clearAuthError()
+      try {
+        await loginWithVk({
+          code: payload.code,
+          deviceId: payload.device_id,
+          state: payload.state,
+        })
+      } catch {
+        // authError set in context
+      } finally {
+        setBusy(false)
+      }
+    },
+    [busy, clearAuthError, loginWithVk],
+  )
+
+  const handleVkError = useCallback((message: string) => {
+    setLocalError(message)
+  }, [])
+
+  function openPasswordAuth() {
+    clearAuthError()
+    setLocalError(null)
+    setShowPasswordAuth(true)
+  }
+
+  function closePasswordAuth() {
+    clearAuthError()
+    setLocalError(null)
+    setShowPasswordAuth(false)
+  }
 
   return (
     <Box sx={appShellPageSx}>
@@ -93,30 +90,17 @@ export function AuthScreen() {
             letterSpacing: '-0.02em',
           }}
         >
-          {mode === 'login' ? 'Вход' : 'Регистрация'}
+          Вход
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          Войдите или зарегистрируйтесь по почте и/или номеру телефона и паролю.
-          Подтверждение почты и телефона пока не требуется.
+          Войдите через VK ID или Яндекс. Почта и пароль — по кнопке ниже.
         </Typography>
       </Box>
-
-      <ToggleButtonGroup
-        exclusive
-        size="small"
-        value={mode}
-        onChange={(_, v: Mode | null) => v && switchMode(v)}
-        aria-label="Режим"
-        sx={{ mb: 2.5, display: 'flex', flexWrap: 'wrap', gap: 1 }}
-      >
-        <ToggleButton value="login">Вход</ToggleButton>
-        <ToggleButton value="register">Регистрация</ToggleButton>
-      </ToggleButtonGroup>
 
       <Paper
         component="section"
         variant="outlined"
-        aria-label={mode === 'login' ? 'Вход' : 'Регистрация'}
+        aria-label="Вход"
         sx={sectionSurfacePaddingSx}
       >
         {displayError ? (
@@ -125,100 +109,59 @@ export function AuthScreen() {
           </Alert>
         ) : null}
 
-        {mode === 'login' ? (
-          <Stack
-            component="form"
-            spacing={2}
-            onSubmit={(ev) => void onLogin(ev)}
-            noValidate
-          >
-            <TextField
-              id="auth-login"
-              label="Почта или телефон"
-              value={loginField}
-              onChange={(ev) => setLoginField(ev.target.value)}
-              autoComplete="username"
-              slotProps={{ htmlInput: { maxLength: 320 } }}
-              fullWidth
-              size="small"
+        <Stack spacing={2} sx={{ opacity: busy ? 0.6 : 1 }}>
+          {!appId ? (
+            <Alert severity="warning" sx={{ mb: 0 }}>
+              Не задан <code>VITE_VK_APP_ID</code> — виджет VK ID недоступен.
+            </Alert>
+          ) : (
+            <VkOneTapLogin
+              onSuccess={(p) => void handleVkSuccess(p)}
+              onError={handleVkError}
             />
-            <TextField
-              id="auth-password"
-              label="Пароль"
-              type="password"
-              value={password}
-              onChange={(ev) => setPassword(ev.target.value)}
-              autoComplete="current-password"
-              slotProps={{ htmlInput: { maxLength: 128 } }}
-              fullWidth
-              size="small"
-            />
-            <Button
-              type="submit"
-              variant="contained"
-              color="primary"
-              disabled={busy || !loginField.trim() || !password}
-            >
-              Войти
-            </Button>
-          </Stack>
-        ) : (
-          <Stack
-            component="form"
-            spacing={2}
-            onSubmit={(ev) => void onRegister(ev)}
-            noValidate
-          >
-            <TextField
-              id="auth-email"
-              label="Почта (необязательно)"
-              type="text"
-              value={email}
-              onChange={(ev) => setEmail(ev.target.value)}
-              autoComplete="email"
-              slotProps={{ htmlInput: { maxLength: 320 } }}
-              fullWidth
-              size="small"
-            />
-            <TextField
-              id="auth-phone"
-              label="Телефон (необязательно)"
-              type="text"
-              value={phone}
-              onChange={(ev) => setPhone(ev.target.value)}
-              autoComplete="tel"
-              slotProps={{ htmlInput: { maxLength: 64 } }}
-              fullWidth
-              size="small"
-            />
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              sx={{ mt: -0.5 }}
-            >
-              Нужно заполнить хотя бы одно из двух полей выше.
+          )}
+
+          <YandexLoginButton disabled={busy} onError={handleVkError} />
+
+          {!yandexId ? (
+            <Typography variant="caption" color="text.secondary">
+              Для входа через Яндекс задайте <code>VITE_YANDEX_CLIENT_ID</code>{' '}
+              в <code>frontend/.env</code>.
             </Typography>
-            <TextField
-              id="auth-reg-password"
-              label="Пароль (мин. 8 символов)"
-              type="password"
-              value={password}
-              onChange={(ev) => setPassword(ev.target.value)}
-              autoComplete="new-password"
-              slotProps={{ htmlInput: { maxLength: 128 } }}
-              fullWidth
-              size="small"
+          ) : null}
+
+          {!showPasswordAuth ? (
+            <Button
+              variant="text"
+              disabled={busy}
+              onClick={openPasswordAuth}
+              sx={{ alignSelf: 'flex-start', mt: 1 }}
+            >
+              Войти по почте или телефону
+            </Button>
+          ) : null}
+
+          <Collapse in={showPasswordAuth}>
+            <Divider sx={{ my: 2 }} />
+            <Typography variant="subtitle2" sx={{ mb: 2 }}>
+              Почта / телефон и пароль
+            </Typography>
+            <PasswordAuthForm
+              busy={busy}
+              onBusyChange={setBusy}
+              onLocalError={setLocalError}
             />
             <Button
-              type="submit"
-              variant="contained"
-              color="primary"
-              disabled={busy || !password.trim()}
+              variant="text"
+              size="small"
+              disabled={busy}
+              onClick={closePasswordAuth}
+              sx={{ alignSelf: 'flex-start', mt: 1 }}
             >
-              Зарегистрироваться
+              Скрыть
             </Button>
-          </Stack>
-        )}
+          </Collapse>
+        </Stack>
       </Paper>
     </Box>
   )

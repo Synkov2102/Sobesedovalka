@@ -5,9 +5,16 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { fetchMe, postAuthLogin, postAuthRegister } from '../api/auth'
+import {
+  fetchMe,
+  postAuthLogin,
+  postAuthRegister,
+  postAuthVk,
+  postAuthYandex,
+} from '../api/auth'
 import type { AuthUser } from '../types/api.types'
 import { AuthContext, type AuthContextValue } from './auth-state'
+import { takeVkCodeVerifier } from './vkPkce'
 import {
   clearAccessToken,
   getAccessToken,
@@ -50,6 +57,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true
     }
   }, [])
+
+  const loginWithVk = useCallback(
+    async (params: { code: string; deviceId: string; state: string }) => {
+      setAuthError(null)
+      const codeVerifier = takeVkCodeVerifier()
+      if (!codeVerifier) {
+        const msg = 'Сессия VK ID истекла — обновите страницу'
+        setAuthError(msg)
+        throw new Error(msg)
+      }
+      try {
+        const r = await postAuthVk({
+          code: params.code,
+          deviceId: params.deviceId,
+          codeVerifier,
+          state: params.state,
+        })
+        setAccessToken(r.accessToken)
+        setUser(r.user)
+      } catch (e) {
+        setAuthError(e instanceof Error ? e.message : 'Ошибка входа')
+        throw e
+      }
+    },
+    [],
+  )
+
+  const loginWithYandex = useCallback(
+    async (params: { code: string; codeVerifier: string; state?: string }) => {
+      setAuthError(null)
+      try {
+        const r = await postAuthYandex({
+          code: params.code,
+          codeVerifier: params.codeVerifier,
+          state: params.state,
+        })
+        setAccessToken(r.accessToken)
+        setUser(r.user)
+      } catch (e) {
+        setAuthError(e instanceof Error ? e.message : 'Ошибка входа через Яндекс')
+        throw e
+      }
+    },
+    [],
+  )
 
   const login = useCallback(async (loginStr: string, password: string) => {
     setAuthError(null)
@@ -103,13 +155,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       ready,
+      loginWithVk,
+      loginWithYandex,
       login,
       register,
       logout,
       authError,
       clearAuthError,
     }),
-    [user, ready, login, register, logout, authError, clearAuthError],
+    [
+      user,
+      ready,
+      loginWithVk,
+      loginWithYandex,
+      login,
+      register,
+      logout,
+      authError,
+      clearAuthError,
+    ],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

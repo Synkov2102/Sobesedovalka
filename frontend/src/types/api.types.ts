@@ -45,6 +45,10 @@ export type CollabPageLeaveEvent = {
 
 export type AuthUser = {
   id: string
+  vkId?: string
+  yandexId?: string
+  displayName?: string
+  avatarUrl?: string
   email?: string
   phone?: string
 }

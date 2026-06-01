@@ -4,6 +4,8 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { UsersRepository } from './users.repository';
+import { VkIdService } from './vk-id.service';
+import { YandexOAuthService } from './yandex-oauth.service';
 
 @Module({
   imports: [
@@ -23,7 +25,13 @@ import { UsersRepository } from './users.repository';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, UsersRepository, JwtAuthGuard],
+  providers: [
+    AuthService,
+    UsersRepository,
+    VkIdService,
+    YandexOAuthService,
+    JwtAuthGuard,
+  ],
   exports: [JwtModule, JwtAuthGuard, UsersRepository],
 })
 export class AuthModule {}

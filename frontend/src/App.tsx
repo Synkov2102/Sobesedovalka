@@ -134,7 +134,8 @@ function AppMain({ user, logout }: AppMainProps) {
   const isPresetEditor = mainTab === 'presets' && presetEditorRoute !== 'list'
   const isFullScreenEditor = isSandbox || isPresetEditor
 
-  const accountLabel = user.email ?? user.phone ?? user.id.slice(0, 8)
+  const accountLabel =
+    user.displayName ?? user.email ?? user.phone ?? user.id.slice(0, 8)
 
   const commitTab = useCallback(
     (next: MainTab) => {

@@ -4,13 +4,33 @@ import { ObjectId } from 'mongodb';
 import { MongoService } from '../mongo/mongo.service';
 
 type UserSchema = {
+  vkId?: string;
+  yandexId?: string;
+  displayName?: string;
+  passwordHash?: string;
+  avatarUrl?: string;
   email?: string;
   phone?: string;
-  passwordHash: string;
   createdAt: string;
+  updatedAt: string;
 };
 
 export type UserDoc = WithId<UserSchema>;
+
+export type VkUserUpsert = {
+  vkId: string;
+  displayName: string;
+  avatarUrl?: string;
+  email?: string;
+  phone?: string;
+};
+
+export type YandexUserUpsert = {
+  yandexId: string;
+  displayName: string;
+  avatarUrl?: string;
+  email?: string;
+};
 
 @Injectable()
 export class UsersRepository implements OnModuleInit {
@@ -20,6 +40,8 @@ export class UsersRepository implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     this.collection = this.mongo.getDb().collection<UserSchema>('users');
+    await this.ensureSparseUniqueIndex('vkId');
+    await this.ensureSparseUniqueIndex('yandexId');
     await this.collection.createIndex(
       { email: 1 },
       { unique: true, sparse: true },
@@ -30,14 +52,67 @@ export class UsersRepository implements OnModuleInit {
     );
   }
 
+  private async ensureSparseUniqueIndex(field: 'vkId' | 'yandexId'): Promise<void> {
+    const indexName = `${field}_1`;
+    const indexes = await this.collection.indexes();
+    const existing = indexes.find((i) => i.name === indexName);
+    if (existing && !existing.sparse) {
+      await this.collection.dropIndex(indexName);
+    }
+    await this.collection.createIndex(
+      { [field]: 1 },
+      { unique: true, sparse: true },
+    );
+  }
+
+  async findByVkId(vkId: string): Promise<UserDoc | null> {
+    return this.collection.findOne({ vkId });
+  }
+
+  async upsertFromVk(data: VkUserUpsert): Promise<UserDoc> {
+    const now = new Date().toISOString();
+    const set: Partial<UserSchema> = {
+      displayName: data.displayName,
+      updatedAt: now,
+    };
+    if (data.avatarUrl) {
+      set.avatarUrl = data.avatarUrl;
+    }
+    if (data.email) {
+      set.email = data.email;
+    }
+    if (data.phone) {
+      set.phone = data.phone;
+    }
+
+    const r = await this.collection.findOneAndUpdate(
+      { vkId: data.vkId },
+      {
+        $set: set,
+        $setOnInsert: {
+          vkId: data.vkId,
+          createdAt: now,
+        },
+      },
+      { upsert: true, returnDocument: 'after' },
+    );
+
+    if (!r) {
+      throw new Error('User upsert failed');
+    }
+    return r;
+  }
+
   async create(data: {
     email?: string;
     phone?: string;
     passwordHash: string;
   }): Promise<UserDoc> {
+    const now = new Date().toISOString();
     const doc: UserSchema = {
       passwordHash: data.passwordHash,
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
     };
     if (data.email) {
       doc.email = data.email;
@@ -58,6 +133,37 @@ export class UsersRepository implements OnModuleInit {
     return this.collection.findOne({
       $or: [{ email: q }, { phone: q }],
     });
+  }
+
+  async upsertFromYandex(data: YandexUserUpsert): Promise<UserDoc> {
+    const now = new Date().toISOString();
+    const set: Partial<UserSchema> = {
+      displayName: data.displayName,
+      updatedAt: now,
+    };
+    if (data.avatarUrl) {
+      set.avatarUrl = data.avatarUrl;
+    }
+    if (data.email) {
+      set.email = data.email;
+    }
+
+    const r = await this.collection.findOneAndUpdate(
+      { yandexId: data.yandexId },
+      {
+        $set: set,
+        $setOnInsert: {
+          yandexId: data.yandexId,
+          createdAt: now,
+        },
+      },
+      { upsert: true, returnDocument: 'after' },
+    );
+
+    if (!r) {
+      throw new Error('User upsert failed');
+    }
+    return r;
   }
 
   async findById(id: string): Promise<UserDoc | null> {

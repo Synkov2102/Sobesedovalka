@@ -14,6 +14,11 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-*}
       JWT_SECRET: ${JWT_SECRET:-local-dev-jwt-secret-min-32-chars!!}
       MONGODB_URI: ${MONGODB_URI:?Set MONGODB_URI in .env — see .env.example}
+      VK_CLIENT_ID: ${VK_CLIENT_ID:-}
+      VK_REDIRECT_URI: ${VK_REDIRECT_URI:-http://localhost:8080}
+      YANDEX_CLIENT_ID: ${YANDEX_CLIENT_ID:-}
+      YANDEX_CLIENT_SECRET: ${YANDEX_CLIENT_SECRET:-}
+      YANDEX_REDIRECT_URI: ${YANDEX_REDIRECT_URI:-http://localhost:8080}
     ports:
       - "8081:3000"
 
