@@ -1,11 +1,6 @@
 import { useEffect, useRef } from 'react'
 import * as VKID from '@vkid/sdk'
-import {
-  createVkPkce,
-  storeVkCodeVerifier,
-  vkAppId,
-  vkRedirectUri,
-} from './vkPkce'
+import { createVkPkce, storeVkCodeVerifier } from './vkPkce'
 
 type VkAuthPayload = {
   code: string
@@ -14,11 +9,18 @@ type VkAuthPayload = {
 }
 
 type Props = {
+  appId: number
+  redirectUri: string
   onSuccess: (payload: VkAuthPayload) => void
   onError: (message: string) => void
 }
 
-export function VkOneTapLogin({ onSuccess, onError }: Props) {
+export function VkOneTapLogin({
+  appId,
+  redirectUri,
+  onSuccess,
+  onError,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const onSuccessRef = useRef(onSuccess)
   const onErrorRef = useRef(onError)
@@ -29,7 +31,6 @@ export function VkOneTapLogin({ onSuccess, onError }: Props) {
   }, [onSuccess, onError])
 
   useEffect(() => {
-    const appId = vkAppId()
     const container = containerRef.current
     if (!appId || !container) {
       return
@@ -49,7 +50,7 @@ export function VkOneTapLogin({ onSuccess, onError }: Props) {
 
         VKID.Config.init({
           app,
-          redirectUrl: vkRedirectUri(),
+          redirectUrl: redirectUri,
           responseMode: VKID.ConfigResponseMode.Callback,
           codeChallenge,
           scope: '',
@@ -99,7 +100,7 @@ export function VkOneTapLogin({ onSuccess, onError }: Props) {
       container.replaceChildren()
       oneTap = null
     }
-  }, [])
+  }, [appId, redirectUri])
 
   return <div ref={containerRef} aria-label="Вход через VK ID" />
 }

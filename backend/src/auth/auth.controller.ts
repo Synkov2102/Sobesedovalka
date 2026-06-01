@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
+import { readOAuthPublicConfig } from './oauth-public-config';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -10,6 +11,11 @@ import { JwtAuthGuard, type RequestUser } from './jwt-auth.guard';
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
+
+  @Get('public-config')
+  publicConfig() {
+    return readOAuthPublicConfig();
+  }
 
   @Post('register')
   register(@Body() dto: RegisterDto) {

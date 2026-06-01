@@ -1,9 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { oauthViteEnvPlugin } from './vite.oauthEnv'
 
 // https://vite.dev/config/
-export default defineConfig({
-  plugins: [react()],
+export default defineConfig(({ mode }) => ({
+  plugins: [react(), oauthViteEnvPlugin(mode)],
   server: {
     proxy: {
       '/api': { target: 'http://127.0.0.1:3000', changeOrigin: true },
@@ -14,4 +15,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

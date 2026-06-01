@@ -3,6 +3,7 @@ import {
   Alert,
   Box,
   Button,
+  CircularProgress,
   Collapse,
   Divider,
   Paper,
@@ -13,11 +14,10 @@ import { useAuth } from './useAuth'
 import { appShellPageSx, sectionSurfacePaddingSx } from '../theme/layout'
 import { AppBrandWordmark } from '../components/AppBrandWordmark'
 import { PasswordAuthForm } from './PasswordAuthForm'
+import { useOAuthPublicConfig } from './useOAuthPublicConfig'
 import { useYandexOAuthCallback } from './useYandexOAuthCallback'
 import { VkOneTapLogin } from './VkOneTapLogin'
 import { YandexLoginButton } from './YandexLoginButton'
-import { vkAppId } from './vkPkce'
-import { yandexClientId } from './yandexOAuth'
 
 type VkAuthPayload = {
   code: string
@@ -27,12 +27,11 @@ type VkAuthPayload = {
 
 export function AuthScreen() {
   const { loginWithVk, authError, clearAuthError } = useAuth()
+  const oauth = useOAuthPublicConfig()
   const [busy, setBusy] = useState(false)
   const [localError, setLocalError] = useState<string | null>(null)
   const [showPasswordAuth, setShowPasswordAuth] = useState(false)
 
-  const appId = vkAppId()
-  const yandexId = yandexClientId()
   const displayError = localError ?? authError
 
   useYandexOAuthCallback((message) => setLocalError(message))
@@ -60,7 +59,7 @@ export function AuthScreen() {
     [busy, clearAuthError, loginWithVk],
   )
 
-  const handleVkError = useCallback((message: string) => {
+  const handleOAuthError = useCallback((message: string) => {
     setLocalError(message)
   }, [])
 
@@ -110,30 +109,40 @@ export function AuthScreen() {
         ) : null}
 
         <Stack spacing={2} sx={{ opacity: busy ? 0.6 : 1 }}>
-          {!appId ? (
-            <Alert severity="warning" sx={{ mb: 0 }}>
-              Не задан <code>VITE_VK_APP_ID</code> — виджет VK ID недоступен.
-            </Alert>
+          {oauth.loading ? (
+            <CircularProgress size={28} sx={{ alignSelf: 'flex-start' }} />
           ) : (
-            <VkOneTapLogin
-              onSuccess={(p) => void handleVkSuccess(p)}
-              onError={handleVkError}
-            />
+            <>
+              {!oauth.vkAppId ? (
+                <Alert severity="warning" sx={{ mb: 0 }}>
+                  Не задан ID приложения VK (
+                  <code>VK_CLIENT_ID</code> в <code>backend/.env</code> или на
+                  бэкенде в Docker).
+                </Alert>
+              ) : (
+                <VkOneTapLogin
+                  appId={oauth.vkAppId}
+                  redirectUri={oauth.vkRedirectUri}
+                  onSuccess={(p) => void handleVkSuccess(p)}
+                  onError={handleOAuthError}
+                />
+              )}
+
+              {oauth.yandexClientId ? (
+                <YandexLoginButton
+                  clientId={oauth.yandexClientId}
+                  redirectUri={oauth.yandexRedirectUri}
+                  disabled={busy}
+                  onError={handleOAuthError}
+                />
+              ) : null}
+            </>
           )}
-
-          <YandexLoginButton disabled={busy} onError={handleVkError} />
-
-          {!yandexId ? (
-            <Typography variant="caption" color="text.secondary">
-              Для входа через Яндекс задайте <code>VITE_YANDEX_CLIENT_ID</code>{' '}
-              в <code>frontend/.env</code>.
-            </Typography>
-          ) : null}
 
           {!showPasswordAuth ? (
             <Button
               variant="text"
-              disabled={busy}
+              disabled={busy || oauth.loading}
               onClick={openPasswordAuth}
               sx={{ alignSelf: 'flex-start', mt: 1 }}
             >

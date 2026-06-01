@@ -44,28 +44,26 @@ export function takeYandexOAuthState(): string | null {
   return takeOAuthValue(YANDEX_STATE_KEY);
 }
 
-export async function startYandexLogin(): Promise<void> {
-  const clientId = yandexClientId();
-  if (!clientId) {
-    throw new Error('Не задан VITE_YANDEX_CLIENT_ID');
-  }
-
+export async function startYandexLogin(params: {
+  clientId: string;
+  redirectUri: string;
+}): Promise<void> {
   const { codeVerifier, codeChallenge } = await createPkcePair();
   const state = createOAuthState();
   storeOAuthValue(YANDEX_PKCE_KEY, codeVerifier);
   storeOAuthValue(YANDEX_STATE_KEY, state);
   markYandexOAuthStarted();
 
-  const params = new URLSearchParams({
+  const authParams = new URLSearchParams({
     response_type: 'code',
-    client_id: clientId,
-    redirect_uri: yandexRedirectUri(),
+    client_id: params.clientId,
+    redirect_uri: params.redirectUri,
     state,
     code_challenge: codeChallenge,
     code_challenge_method: 'S256',
   });
 
-  window.location.assign(`${YANDEX_AUTHORIZE_URL}?${params}`);
+  window.location.assign(`${YANDEX_AUTHORIZE_URL}?${authParams}`);
 }
 
 export type YandexCallbackParams = {
