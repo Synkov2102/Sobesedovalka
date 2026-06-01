@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
-import { Box, Stack, Tooltip, Typography } from '@mui/material'
+import { Box, Chip, Stack, Tooltip, Typography } from '@mui/material'
 import { alpha, useTheme } from '@mui/material/styles'
 import type { CollabPeerDTO } from '../collab/collab.types'
+import { peerAccentRgbCss, peerAccentRgbaCss } from '../collab/peerColor'
 import { normalizeSandpackFilePath } from '../collab/sandpackPaths'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 
@@ -46,9 +47,11 @@ export function PlaygroundCollabBar({
         display: 'flex',
         alignItems: 'center',
         px: 1,
-        borderTop: `1px solid ${theme.palette.divider}`,
+        border: `1px solid ${theme.palette.divider}`,
         bgcolor: alpha(theme.palette.background.paper, 0.92),
         overflow: 'hidden',
+        borderRadius: 4,
+        mt: 1,
       }}
     >
       {sortedPeers.length === 0 ? (
@@ -87,7 +90,8 @@ export function PlaygroundCollabBar({
               )
               const isSelf = p.clientId === selfClientId
               const isAway = p.cursorAway === true
-              const statusColor = isAway
+              const accentCss = peerAccentRgbCss(p)
+              const presenceMain = isAway
                 ? theme.palette.error.main
                 : theme.palette.success.main
               const tooltipLines = [
@@ -124,10 +128,10 @@ export function PlaygroundCollabBar({
                     sx={{
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: 0.5,
+                      gap: 0.625,
                       flexShrink: 0,
                       height: BAR_HEIGHT_PX,
-                      px: 0.5,
+                      px: 0.625,
                       m: 0,
                       border: 0,
                       borderRadius: 0.5,
@@ -151,8 +155,8 @@ export function PlaygroundCollabBar({
                         height: 6,
                         borderRadius: '50%',
                         flexShrink: 0,
-                        bgcolor: statusColor,
-                        boxShadow: `0 0 0 1px ${alpha(statusColor, 0.35)}`,
+                        bgcolor: accentCss,
+                        boxShadow: `0 0 0 1px ${peerAccentRgbaCss(p, 0.45)}`,
                       }}
                     />
                     <Typography
@@ -162,12 +166,33 @@ export function PlaygroundCollabBar({
                         fontSize: '0.65rem',
                         lineHeight: 1,
                         fontWeight: isSelf ? 700 : 500,
-                        maxWidth: 140,
+                        maxWidth: 120,
                       }}
                     >
                       {p.displayName}
                       {isSelf ? ' (вы)' : ''}
                     </Typography>
+                    <Chip
+                      label={isAway ? 'off' : 'on'}
+                      size="small"
+                      aria-hidden
+                      sx={{
+                        flexShrink: 0,
+                        height: 14,
+                        ml: 0.25,
+                        bgcolor: alpha(presenceMain, 0.18),
+                        color: presenceMain,
+                        border: `1px solid ${alpha(presenceMain, 0.55)}`,
+                        '& .MuiChip-label': {
+                          px: 0.55,
+                          py: 0,
+                          fontSize: '0.58rem',
+                          fontWeight: 700,
+                          letterSpacing: '0.04em',
+                          textTransform: 'lowercase',
+                        },
+                      }}
+                    />
                   </Box>
                 </Tooltip>
               )

@@ -5,6 +5,7 @@ import {
   type SetStateAction,
 } from 'react'
 import { useDraftInputFocus } from '../hooks/useDraftInputFocus'
+import { treeRowPaddingLeft } from '../constants/playgroundFileExplorer.constants'
 import type { ExplorerDraft } from '../types/playgroundFileExplorer.types'
 
 type ExplorerDraftRowProps = {
@@ -45,7 +46,7 @@ export function ExplorerDraftRow({
   return (
     <div
       className="playground__treeRow playground__treeRow--draft"
-      style={{ paddingLeft: `${depth * 16 + 12}px` }}
+      style={{ paddingLeft: `${treeRowPaddingLeft(depth)}px` }}
     >
       {draft.kind === 'folder' ? (
         <span className="playground__treeIcon">{'>'}</span>

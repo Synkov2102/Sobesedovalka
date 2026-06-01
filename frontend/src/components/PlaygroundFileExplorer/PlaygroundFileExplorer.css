@@ -63,16 +63,57 @@
   display: block;
 }
 
+.playground__treeChildren {
+  --tree-line: color-mix(in srgb, var(--text) 45%, var(--border));
+  --tree-guide-pad: 10px;
+  --tree-row-h: 24px;
+  --tree-branch-y: 12px;
+  --tree-indent: 12px;
+  margin-left: var(--tree-indent);
+  padding-left: var(--tree-guide-pad);
+  border-left: 1px solid var(--tree-line);
+}
+
+.playground__treeChildren > .playground__treeRow,
+.playground__treeChildren > .playground__treeBranchWrap > .playground__treeRow,
+.playground__treeChildren > .playground__treeGroup > .playground__treeRow {
+  position: relative;
+  min-height: var(--tree-row-h);
+  align-items: center;
+}
+
+.playground__treeChildren > .playground__treeRow::before,
+.playground__treeChildren > .playground__treeBranchWrap > .playground__treeRow::before,
+.playground__treeChildren > .playground__treeGroup > .playground__treeRow::before {
+  content: '';
+  position: absolute;
+  left: calc(-1 * var(--tree-guide-pad) - 1px);
+  top: var(--tree-branch-y);
+  width: var(--tree-guide-pad);
+  height: 0;
+  border: 0;
+  border-top: 1px solid var(--tree-line);
+  pointer-events: none;
+}
+
+.playground__treeChildren > .playground__treeRow:last-child::after,
+.playground__treeChildren > .playground__treeBranchWrap:last-child > .playground__treeRow::after {
+  content: '';
+  position: absolute;
+  left: calc(-1 * var(--tree-guide-pad) - 1px);
+  top: calc(var(--tree-branch-y) + 1px);
+  bottom: 0;
+  width: 2px;
+  background: color-mix(in srgb, var(--code-bg) 88%, var(--bg));
+  pointer-events: none;
+}
+
 .playground__treeRow {
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
   padding-right: 8px;
-}
-
-.playground__treeRow--folder {
-  margin-top: 2px;
 }
 
 .playground__treeItem {
@@ -84,11 +125,15 @@
   border: 0;
   background: transparent;
   color: var(--text-h);
-  padding: 6px 8px;
-  border-radius: 6px;
+  padding: 3px 6px;
+  border-radius: 5px;
   cursor: pointer;
   text-align: left;
   font: inherit;
+}
+
+.playground__treeChildren .playground__treeItem {
+  padding-block: 2px;
 }
 
 .playground__treeItem:hover {

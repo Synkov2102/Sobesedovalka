@@ -6,6 +6,7 @@ import type {
   ExplorerFileNode,
   ExplorerFolderNode,
 } from '../types/playgroundFileExplorer.types'
+import { treeRowPaddingLeft } from '../constants/playgroundFileExplorer.constants'
 import { isPathInFolder } from '../utils/paths'
 
 export function renderFolder({
@@ -121,7 +122,7 @@ export function renderFolder({
         ) : (
           <div
             className="playground__treeRow playground__treeRow--folder"
-            style={{ paddingLeft: `${nextDepth * 16 + 12}px` }}
+            style={{ paddingLeft: `${treeRowPaddingLeft(nextDepth)}px` }}
           >
             <button
               type="button"
@@ -142,22 +143,19 @@ export function renderFolder({
               onContextMenu={handleContextMenu}
               title={node.path}
             >
-              <span className="playground__treeIcon">
-                {collapsed ? '>' : 'v'}
-              </span>
               <span className="playground__treeName">{node.name}</span>
             </button>
           </div>
         )}
 
         {collapsed ? null : (
-          <>
+          <div className="playground__treeChildren">
             {draft?.mode === 'create' && draft.parentPath === node.path
               ? renderDraftRowAtDepth(nextDepth + 1)
               : null}
             {node.folders.map(renderChildFolder)}
             {node.files.map(renderChildFile)}
-          </>
+          </div>
         )}
       </div>
     )

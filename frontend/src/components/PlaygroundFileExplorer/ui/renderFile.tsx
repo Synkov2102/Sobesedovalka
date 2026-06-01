@@ -7,6 +7,7 @@ import type {
   ExplorerDraft,
   ExplorerFileNode,
 } from '../types/playgroundFileExplorer.types'
+import { treeRowPaddingLeft } from '../constants/playgroundFileExplorer.constants'
 import { getParentPath, isPathInFolder } from '../utils/paths'
 
 export function renderFile({
@@ -50,7 +51,11 @@ export function renderFile({
     draft.kind === 'file' &&
     draft.path === file.path
   ) {
-    return <div key={file.path}>{renderDraftRowAtDepth(depth)}</div>
+    return (
+      <div key={file.path} className="playground__treeBranchWrap">
+        {renderDraftRowAtDepth(depth)}
+      </div>
+    )
   }
 
   const isFocused = focusedPath === file.path
@@ -127,7 +132,7 @@ export function renderFile({
     <div
       key={file.path}
       className="playground__treeRow"
-      style={{ paddingLeft: `${depth * 16 + 12}px` }}
+      style={{ paddingLeft: `${treeRowPaddingLeft(depth)}px` }}
     >
       <button
         type="button"
