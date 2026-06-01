@@ -27,9 +27,10 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       args:
-        VITE_VK_APP_ID: ${VITE_VK_APP_ID:-}
+        # Если VITE_* не заданы в корневом .env — подставятся ID бэкенда (см. .env.example)
+        VITE_VK_APP_ID: ${VITE_VK_APP_ID:-${VK_CLIENT_ID}}
         VITE_VK_REDIRECT_URI: ${VITE_VK_REDIRECT_URI:-http://localhost:8080}
-        VITE_YANDEX_CLIENT_ID: ${VITE_YANDEX_CLIENT_ID:-}
+        VITE_YANDEX_CLIENT_ID: ${VITE_YANDEX_CLIENT_ID:-${YANDEX_CLIENT_ID}}
         VITE_YANDEX_REDIRECT_URI: ${VITE_YANDEX_REDIRECT_URI:-http://localhost:8080}
         # Пусто — Socket.IO на том же origin (nginx проксирует /socket.io)
         VITE_COLLAB_WS_URL: ${VITE_COLLAB_WS_URL:-}
