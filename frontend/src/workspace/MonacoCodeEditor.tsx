@@ -14,6 +14,7 @@ import {
   EditorPreferencesProvider,
   useEditorPreferences,
 } from './EditorPreferencesContext'
+import { EditorFileBreadcrumb } from './EditorFileBreadcrumb'
 import { EditorSettingsControls } from './EditorSettingsControls'
 import { useWorkspace } from './WorkspaceContext'
 import { setActiveMonacoEditor } from './monacoPresence'
@@ -232,7 +233,7 @@ function MonacoCodeEditorInner() {
   return (
     <div className="playground__editorPane">
       <div className="playground__editorTabs">
-        <span className="playground__editorTab is-active">{activeFile}</span>
+        <EditorFileBreadcrumb filePath={activeFile} />
         <EditorSettingsControls />
       </div>
       <Editor

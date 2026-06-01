@@ -219,15 +219,83 @@ html[data-app-theme='dark'] .playground__btn--danger {
   background: color-mix(in srgb, var(--code-bg) 70%, var(--bg));
 }
 
-.playground__editorTab {
+.playground__editorBreadcrumb {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.playground__editorBreadcrumbList {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+
+.playground__editorBreadcrumbItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+.playground__editorBreadcrumbItem--file {
+  flex-shrink: 1;
+  min-width: 3.5rem;
+  padding: 2px 6px 2px 2px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent-bg) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-border) 35%, transparent);
+}
+
+.playground__editorBreadcrumbFolder {
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 12px;
+  line-height: 1.2;
+  color: var(--text);
+  opacity: 0.82;
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 0;
+}
+
+.playground__editorBreadcrumbSep {
+  width: 15px !important;
+  height: 15px !important;
+  color: var(--text);
+  opacity: 0.38;
+  flex-shrink: 0;
+}
+
+.playground__editorBreadcrumbFile {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
   color: var(--text-h);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.playground__editorBreadcrumbItem--file .playground__fileTypeIcon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  font-size: 6px;
+  border-radius: 3px;
+}
+
+.playground__editorBreadcrumbItem--file .playground__fileTypeIcon::after {
+  width: 3px;
+  height: 3px;
 }
 
 .playground__editorSettings {
