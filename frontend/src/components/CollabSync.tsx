@@ -339,6 +339,24 @@ export function CollabSync({
     })
     socketRef.current = socket
 
+    const emitFullYjsState = (reason: string) => {
+      if (!socket.connected) {
+        return
+      }
+      const update = Y.encodeStateAsUpdate(doc)
+      collabSyncLog('yjs-provider', 'emit-full-state', {
+        room,
+        clientId,
+        reason,
+        updateBytes: update.length,
+      })
+      socket.emit('collab-yjs-update', {
+        room,
+        clientId,
+        update: Array.from(update),
+      })
+    }
+
     const destroyProvider = createYjsSocketProvider({
       doc,
       socket,
@@ -350,6 +368,7 @@ export function CollabSync({
         seedYDocFromSnapshotIfEmpty()
         setYjsReady(true)
         refreshWorkspaceFromYDoc()
+        emitFullYjsState('sync-complete')
       },
     })
 

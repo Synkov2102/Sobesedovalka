@@ -170,6 +170,7 @@ export class CollabGateway implements OnGatewayDisconnect {
         this.roomPeers.delete(room);
         this.lastRosterPayload.delete(room);
         this.roomFileRevisions.delete(room);
+        this.flushYjsPersist(room, 'last-peer-disconnect');
         this.roomYDocs.get(room)?.destroy();
         this.roomYDocs.delete(room);
       }
@@ -630,6 +631,15 @@ export class CollabGateway implements OnGatewayDisconnect {
     if (!this.assertSocketSender(client, room, from)) {
       return;
     }
+    if (this.roomYDocs.has(room)) {
+      this.syncLog('editor-remove-reject', {
+        reason: 'yjs-active',
+        room,
+        path,
+        from,
+      });
+      return;
+    }
     if (!this.roomFiles.has(room)) {
       return;
     }
@@ -760,51 +770,61 @@ export class CollabGateway implements OnGatewayDisconnect {
       room,
       setTimeout(() => {
         this.yjsPersistTimers.delete(room);
-        const doc = this.roomYDocs.get(room);
-        if (!doc) {
-          this.syncLog('yjs-persist-skip', { room, reason: 'missing-doc' });
-          return;
-        }
-        this.syncYDocToMemory(room, doc);
-        const files = this.snapshotFiles(room);
-        const folders = this.snapshotFolders(room);
-        this.syncLog('yjs-persist-flush', {
-          room,
-          fileCount: Object.keys(files).length,
-          folderCount: folders.length,
-        });
-        void this.mongoRepo
-          .replaceRoomFiles(room, files)
-          .then(() =>
-            this.syncLog('yjs-persist-files-ok', {
-              room,
-              fileCount: Object.keys(files).length,
-            }),
-          )
-          .catch((e: unknown) => {
-            this.syncLog('yjs-persist-files-error', {
-              room,
-              message: String(e),
-            });
-            this.logger.warn(String(e));
-          });
-        void this.mongoRepo
-          .replaceRoomFolders(room, folders)
-          .then(() =>
-            this.syncLog('yjs-persist-folders-ok', {
-              room,
-              folderCount: folders.length,
-            }),
-          )
-          .catch((e: unknown) => {
-            this.syncLog('yjs-persist-folders-error', {
-              room,
-              message: String(e),
-            });
-            this.logger.warn(String(e));
-          });
+        this.flushYjsPersist(room, 'debounce');
       }, CollabGateway.YJS_PERSIST_DEBOUNCE_MS),
     );
+  }
+
+  private flushYjsPersist(room: string, reason: string): void {
+    const prev = this.yjsPersistTimers.get(room);
+    if (prev) {
+      clearTimeout(prev);
+      this.yjsPersistTimers.delete(room);
+    }
+    const doc = this.roomYDocs.get(room);
+    if (!doc) {
+      this.syncLog('yjs-persist-skip', { room, reason: 'missing-doc' });
+      return;
+    }
+    this.syncYDocToMemory(room, doc);
+    const files = this.snapshotFiles(room);
+    const folders = this.snapshotFolders(room);
+    this.syncLog('yjs-persist-flush', {
+      room,
+      reason,
+      fileCount: Object.keys(files).length,
+      folderCount: folders.length,
+    });
+    void this.mongoRepo
+      .replaceRoomFiles(room, files)
+      .then(() =>
+        this.syncLog('yjs-persist-files-ok', {
+          room,
+          fileCount: Object.keys(files).length,
+        }),
+      )
+      .catch((e: unknown) => {
+        this.syncLog('yjs-persist-files-error', {
+          room,
+          message: String(e),
+        });
+        this.logger.warn(String(e));
+      });
+    void this.mongoRepo
+      .replaceRoomFolders(room, folders)
+      .then(() =>
+        this.syncLog('yjs-persist-folders-ok', {
+          room,
+          folderCount: folders.length,
+        }),
+      )
+      .catch((e: unknown) => {
+        this.syncLog('yjs-persist-folders-error', {
+          room,
+          message: String(e),
+        });
+        this.logger.warn(String(e));
+      });
   }
 
   private normalizeYjsUpdate(raw: unknown): Uint8Array | null {
@@ -824,6 +844,10 @@ export class CollabGateway implements OnGatewayDisconnect {
     const room = typeof body?.room === 'string' ? body.room : '';
     const folders = Array.isArray(body?.folders) ? body.folders : [];
     if (!room) {
+      return;
+    }
+    if (this.roomYDocs.has(room)) {
+      this.syncLog('folders-sync-reject', { reason: 'yjs-active', room });
       return;
     }
 
