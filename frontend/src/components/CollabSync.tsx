@@ -289,6 +289,13 @@ export function CollabSync({
 
   const emitFileChange = useCallback(
     (path: string, content: string) => {
+      if (yjsSyncedRef.current) {
+        collabSyncLog('editor', 'skip-file-fallback-after-yjs-sync', {
+          path,
+          contentLen: content.length,
+        })
+        return
+      }
       const normalizedPath = normalizeSandpackFilePath(path)
       const socket = socketRef.current
       if (!normalizedPath || !socket?.connected) {
@@ -450,6 +457,13 @@ export function CollabSync({
         typeof payload?.content === 'string' ? payload.content : null
       const currentDoc = ydocRef.current
       if (!path || content === null) {
+        return
+      }
+      if (yjsSyncedRef.current) {
+        collabSyncLog('editor', 'skip-file-fallback-after-yjs-sync', {
+          path,
+          contentLen: content.length,
+        })
         return
       }
       if (currentDoc) {

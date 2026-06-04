@@ -542,6 +542,15 @@ export class CollabGateway implements OnGatewayDisconnect {
     if (!this.assertSocketSender(client, room, from)) {
       return;
     }
+    if (this.roomYDocs.has(room)) {
+      this.syncLog('editor-file-reject', {
+        reason: 'yjs-active',
+        room,
+        path,
+        from,
+      });
+      return;
+    }
     if (!this.roomFiles.has(room)) {
       this.roomFiles.set(room, new Map());
     }

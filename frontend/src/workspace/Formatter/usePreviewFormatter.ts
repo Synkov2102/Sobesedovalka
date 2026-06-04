@@ -44,6 +44,7 @@ export function usePreviewFormatter(
       doc.transact(() => {
         replaceYText(getYFileText(doc, path), result.code)
       }, 'preview-formatter')
+      return
     }
     fileSync?.emitFileChange(path, result.code)
   }, [doc, fileSync, synced, updateWorkspaceFile])

@@ -249,9 +249,10 @@ function MonacoCodeEditorInner() {
             return
           }
           const content = next ?? ''
-          if (!doc || !synced) {
-            workspace.updateWorkspaceFile(activeFile, content)
+          if (doc && synced) {
+            return
           }
+          workspace.updateWorkspaceFile(activeFile, content)
           fileSync?.emitFileChange(activeFile, content)
         }}
         options={{
