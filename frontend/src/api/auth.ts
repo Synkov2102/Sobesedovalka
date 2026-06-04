@@ -72,6 +72,7 @@ export async function postAuthVk(body: {
   deviceId: string
   codeVerifier: string
   state?: string
+  redirectUri?: string
 }): Promise<AuthLoginResponse> {
   const res = await fetch(`${API_PREFIX}/auth/vk`, {
     method: 'POST',

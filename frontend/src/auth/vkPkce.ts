@@ -1,9 +1,14 @@
 import {
   createPkcePair,
+  peekOAuthValue,
   storeOAuthValue,
   takeOAuthValue,
   type PkcePair,
 } from './oauthPkce';
+
+export function peekVkCodeVerifier(): string | null {
+  return peekOAuthValue(VK_PKCE_KEY);
+}
 
 const VK_PKCE_KEY = 'sobesedovalka_vkid_pkce';
 

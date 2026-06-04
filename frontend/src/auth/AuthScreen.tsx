@@ -50,6 +50,7 @@ export function AuthScreen() {
           code: payload.code,
           deviceId: payload.device_id,
           state: payload.state,
+          redirectUri: oauth.vkRedirectUri,
         })
       } catch {
         // authError set in context
@@ -57,7 +58,7 @@ export function AuthScreen() {
         setBusy(false)
       }
     },
-    [busy, clearAuthError, loginWithVk],
+    [busy, clearAuthError, loginWithVk, oauth.vkRedirectUri],
   )
 
   const handleOAuthError = useCallback((message: string) => {

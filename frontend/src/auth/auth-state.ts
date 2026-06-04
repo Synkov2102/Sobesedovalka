@@ -9,6 +9,7 @@ export type AuthContextValue = {
     code: string
     deviceId: string
     state: string
+    redirectUri: string
   }) => Promise<void>
   loginWithYandex: (params: {
     code: string

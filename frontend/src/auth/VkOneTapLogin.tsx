@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import * as VKID from '@vkid/sdk'
-import { createVkPkce, storeVkCodeVerifier } from './vkPkce'
+import { codeChallengeFromVerifier } from './oauthPkce'
+import { createVkPkce, peekVkCodeVerifier, storeVkCodeVerifier } from './vkPkce'
 
 type VkAuthPayload = {
   code: string
@@ -45,8 +46,16 @@ export function VkOneTapLogin({
         return
       }
       try {
-        const { codeVerifier, codeChallenge } = await createVkPkce()
-        storeVkCodeVerifier(codeVerifier)
+        let codeVerifier = peekVkCodeVerifier()
+        let codeChallenge: string
+        if (codeVerifier) {
+          codeChallenge = await codeChallengeFromVerifier(codeVerifier)
+        } else {
+          const pair = await createVkPkce()
+          codeVerifier = pair.codeVerifier
+          codeChallenge = pair.codeChallenge
+          storeVkCodeVerifier(codeVerifier)
+        }
 
         VKID.Config.init({
           app,

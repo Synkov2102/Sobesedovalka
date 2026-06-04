@@ -3,6 +3,7 @@ import {
   fetchOAuthPublicConfig,
   type OAuthPublicConfig,
 } from '../api/oauthPublicConfig'
+import { oauthRedirectUriForPage } from './oauthRedirectUri'
 import { vkAppId as vkAppIdFromEnv, vkRedirectUri as vkRedirectFromEnv } from './vkPkce'
 import { yandexClientId as yandexFromEnv, yandexRedirectUri as yandexRedirectFromEnv } from './yandexOAuth'
 
@@ -21,15 +22,15 @@ function mergeConfig(server: OAuthPublicConfig | null): ResolvedOAuthConfig {
 
   return {
     vkAppId,
-    vkRedirectUri:
-      vkRedirectFromEnv() ??
-      server?.vkRedirectUri?.trim() ??
-      window.location.origin,
+    vkRedirectUri: oauthRedirectUriForPage(
+      vkRedirectFromEnv(),
+      server?.vkRedirectUri,
+    ),
     yandexClientId,
-    yandexRedirectUri:
-      yandexRedirectFromEnv() ??
-      server?.yandexRedirectUri?.trim() ??
-      window.location.origin,
+    yandexRedirectUri: oauthRedirectUriForPage(
+      yandexRedirectFromEnv(),
+      server?.yandexRedirectUri,
+    ),
     loading: false,
   }
 }

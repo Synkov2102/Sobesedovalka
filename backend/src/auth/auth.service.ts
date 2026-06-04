@@ -115,6 +115,7 @@ export class AuthService {
       deviceId: dto.deviceId,
       codeVerifier: dto.codeVerifier,
       state: dto.state,
+      redirectUri: dto.redirectUri,
     });
 
     const profile = await this.vk.fetchUserProfile(tokens.access_token);

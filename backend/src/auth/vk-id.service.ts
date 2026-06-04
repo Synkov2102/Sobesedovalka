@@ -3,6 +3,7 @@ import {
   InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { resolveOAuthRedirectUri } from './oauth-redirect';
 
 const VK_TOKEN_URL = 'https://id.vk.ru/oauth2/auth';
 const VK_USER_INFO_URL = 'https://id.vk.ru/oauth2/user_info';
@@ -64,14 +65,20 @@ export class VkIdService {
     deviceId: string;
     codeVerifier: string;
     state?: string;
+    redirectUri?: string;
   }): Promise<VkTokenResponse> {
+    const redirect_uri = resolveOAuthRedirectUri(
+      this.redirectUri(),
+      params.redirectUri,
+      'VK_REDIRECT_URI',
+    );
     const body = new URLSearchParams({
       grant_type: 'authorization_code',
       code: params.code,
       code_verifier: params.codeVerifier,
       client_id: this.clientId(),
       device_id: params.deviceId,
-      redirect_uri: this.redirectUri(),
+      redirect_uri,
     });
     if (params.state?.trim()) {
       body.set('state', params.state.trim());

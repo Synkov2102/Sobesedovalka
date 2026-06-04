@@ -59,7 +59,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const loginWithVk = useCallback(
-    async (params: { code: string; deviceId: string; state: string }) => {
+    async (params: {
+      code: string
+      deviceId: string
+      state: string
+      redirectUri: string
+    }) => {
       setAuthError(null)
       const codeVerifier = takeVkCodeVerifier()
       if (!codeVerifier) {
@@ -73,6 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           deviceId: params.deviceId,
           codeVerifier,
           state: params.state,
+          redirectUri: params.redirectUri,
         })
         setAccessToken(r.accessToken)
         setUser(r.user)

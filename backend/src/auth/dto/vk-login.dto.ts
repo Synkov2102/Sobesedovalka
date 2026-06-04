@@ -20,4 +20,10 @@ export class VkLoginDto {
   @IsString()
   @MaxLength(512)
   state?: string;
+
+  /** Тот же redirect_uri, что в VKID.Config.init (обычно origin страницы). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  redirectUri?: string;
 }

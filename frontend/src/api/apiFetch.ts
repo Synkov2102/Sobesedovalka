@@ -1,4 +1,4 @@
-import { getAccessToken } from '../auth/tokenStorage'
+import { clearAccessToken, getAccessToken } from '../auth/tokenStorage'
 import { API_PREFIX } from './constants'
 
 /** Authenticated fetch to `/api/...` (Vite proxy). */
@@ -12,5 +12,9 @@ export async function apiFetch(
   if (t) {
     headers.set('Authorization', `Bearer ${t}`)
   }
-  return fetch(`${API_PREFIX}${p}`, { ...init, headers })
+  const res = await fetch(`${API_PREFIX}${p}`, { ...init, headers })
+  if (res.status === 401 && t) {
+    clearAccessToken()
+  }
+  return res
 }

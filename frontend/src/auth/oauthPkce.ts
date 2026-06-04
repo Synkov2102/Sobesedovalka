@@ -27,8 +27,14 @@ export type PkcePair = {
 
 export async function createPkcePair(): Promise<PkcePair> {
   const codeVerifier = randomString(64);
-  const codeChallenge = await sha256Base64Url(codeVerifier);
+  const codeChallenge = await codeChallengeFromVerifier(codeVerifier);
   return { codeVerifier, codeChallenge };
+}
+
+export async function codeChallengeFromVerifier(
+  codeVerifier: string,
+): Promise<string> {
+  return sha256Base64Url(codeVerifier);
 }
 
 export function createOAuthState(): string {
@@ -39,8 +45,13 @@ export function storeOAuthValue(key: string, value: string): void {
   sessionStorage.setItem(key, value);
 }
 
-export function takeOAuthValue(key: string): string | null {
+export function peekOAuthValue(key: string): string | null {
   const v = sessionStorage.getItem(key);
+  return v?.trim() ? v : null;
+}
+
+export function takeOAuthValue(key: string): string | null {
+  const v = peekOAuthValue(key);
   sessionStorage.removeItem(key);
   return v;
 }
