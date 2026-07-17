@@ -19,7 +19,10 @@ export type WorkspaceContextValue = {
   folderPaths: string[]
   activeFile: string
   snapshotReady: boolean
-  setWorkspaceSnapshot: (files: Record<string, string>, folders?: string[]) => void
+  setWorkspaceSnapshot: (
+    files: Record<string, string>,
+    folders?: string[],
+  ) => void
   updateWorkspaceFile: (path: string, content: string) => void
   deleteWorkspaceFile: (path: string) => void
   openFile: (path: string) => void
@@ -125,7 +128,10 @@ export function WorkspaceProvider({
       }
       const nextFiles = { ...filesRef.current, [normalized]: content }
       const nextFilePaths = sortPaths([...filePathsRef.current, normalized])
-      const nextFolders = normalizeFolderList(nextFilePaths, folderPathsRef.current)
+      const nextFolders = normalizeFolderList(
+        nextFilePaths,
+        folderPathsRef.current,
+      )
       syncStateRefs(nextFiles, nextFilePaths, nextFolders)
       setFiles(nextFiles)
       setFilePaths(nextFilePaths)
@@ -142,8 +148,13 @@ export function WorkspaceProvider({
       }
       const nextFiles = { ...filesRef.current }
       delete nextFiles[normalized]
-      const nextFilePaths = filePathsRef.current.filter((entry) => entry !== normalized)
-      const nextFolders = normalizeFolderList(nextFilePaths, folderPathsRef.current)
+      const nextFilePaths = filePathsRef.current.filter(
+        (entry) => entry !== normalized,
+      )
+      const nextFolders = normalizeFolderList(
+        nextFilePaths,
+        folderPathsRef.current,
+      )
       syncStateRefs(nextFiles, nextFilePaths, nextFolders)
       setFiles(nextFiles)
       setFilePaths(nextFilePaths)
@@ -166,12 +177,15 @@ export function WorkspaceProvider({
     }
   }, [])
 
-  const syncFolders = useCallback((folders: string[], nextFilePaths?: string[]) => {
-    const baseFiles = nextFilePaths ?? filePathsRef.current
-    const nextFolders = normalizeFolderList(baseFiles, folders)
-    folderPathsRef.current = nextFolders
-    setFolderPaths(nextFolders)
-  }, [])
+  const syncFolders = useCallback(
+    (folders: string[], nextFilePaths?: string[]) => {
+      const baseFiles = nextFilePaths ?? filePathsRef.current
+      const nextFolders = normalizeFolderList(baseFiles, folders)
+      folderPathsRef.current = nextFolders
+      setFolderPaths(nextFolders)
+    },
+    [],
+  )
 
   const value = useMemo<WorkspaceContextValue>(
     () => ({
@@ -214,4 +228,3 @@ export function useWorkspace(): WorkspaceContextValue {
   }
   return value
 }
-

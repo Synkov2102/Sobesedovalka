@@ -7,4 +7,3 @@ export function normalizeWorkspacePath(path: string): string {
   const withSlash = p.startsWith('/') ? p : `/${p}`
   return withSlash.replace(/\/+/g, '/')
 }
-

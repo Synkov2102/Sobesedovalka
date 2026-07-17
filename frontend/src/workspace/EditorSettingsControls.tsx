@@ -14,7 +14,8 @@ import {
 import { useEditorPreferences } from './EditorPreferencesContext'
 
 export function EditorSettingsControls() {
-  const { colorTheme, setColorTheme, fontId, setFontId } = useEditorPreferences()
+  const { colorTheme, setColorTheme, fontId, setFontId } =
+    useEditorPreferences()
 
   const handleThemeChange = (event: SelectChangeEvent) => {
     setColorTheme(event.target.value as EditorColorThemePreference)

@@ -92,7 +92,9 @@ export function useWorkspaceColumnWidths(
   const [layout, setLayout] = useState(loadWorkspaceColumnLayout)
   const dragRef = useRef<DragState | null>(null)
   const layoutRef = useRef(layout)
-  layoutRef.current = layout
+  useEffect(() => {
+    layoutRef.current = layout
+  }, [layout])
 
   const applyLayout = useCallback(
     (next: WorkspaceColumnLayout) => {

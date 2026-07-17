@@ -1,7 +1,6 @@
-import type { OnMount } from '@monaco-editor/react'
+import type { Uri } from 'monaco-editor'
 import { normalizeWorkspacePath } from './workspacePaths'
-
-type MonacoMountApi = Parameters<OnMount>[1]
+import type { MonacoApi } from './monacoApi'
 
 const managedPaths = new Set<string>()
 
@@ -15,15 +14,12 @@ export function workspaceFileUri(path: string): string {
   return normalized ? `file://${normalized}` : ''
 }
 
-export function workspaceModelUri(
-  monaco: MonacoMountApi,
-  filePath: string,
-): ReturnType<MonacoMountApi['Uri']['parse']> {
+export function workspaceModelUri(monaco: MonacoApi, filePath: string): Uri {
   return monaco.Uri.parse(workspaceFileUri(filePath))
 }
 
 export function syncWorkspaceModels(
-  monaco: MonacoMountApi,
+  monaco: MonacoApi,
   files: Record<string, string>,
   options: {
     activePath: string
@@ -42,7 +38,7 @@ export function syncWorkspaceModels(
 
     const uri = workspaceModelUri(monaco, path)
     const language = options.languageForPath(path)
-    let model = monaco.editor.getModel(uri)
+    const model = monaco.editor.getModel(uri)
 
     if (!model) {
       monaco.editor.createModel(content, language, uri)
@@ -73,7 +69,7 @@ export function syncWorkspaceModels(
   }
 }
 
-export function disposeWorkspaceModels(monaco: MonacoMountApi): void {
+export function disposeWorkspaceModels(monaco: MonacoApi): void {
   for (const path of managedPaths) {
     monaco.editor.getModel(workspaceModelUri(monaco, path))?.dispose()
   }

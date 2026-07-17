@@ -10,4 +10,3 @@ export const CollabFileSyncContext =
 export function useCollabFileSync(): CollabFileSyncContextValue | null {
   return useContext(CollabFileSyncContext)
 }
-

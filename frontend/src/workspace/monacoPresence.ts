@@ -28,9 +28,6 @@ export function readMonacoSelection(): {
   }
 }
 
-export function getActiveMonacoEditor():
-  | monaco.editor.IStandaloneCodeEditor
-  | null {
+export function getActiveMonacoEditor(): monaco.editor.IStandaloneCodeEditor | null {
   return activeEditor
 }
-

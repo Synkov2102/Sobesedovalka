@@ -113,10 +113,7 @@ function canRemoveMember(
   return false
 }
 
-function removeActionLabel(
-  actorUserId: string,
-  targetUserId: string,
-): string {
+function removeActionLabel(actorUserId: string, targetUserId: string): string {
   return actorUserId === targetUserId ? 'Выйти' : 'Исключить'
 }
 
@@ -192,9 +189,7 @@ export function OrganizationsPanel({
       setOrgs(data)
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : 'Не удалось загрузить организации',
+        err instanceof Error ? err.message : 'Не удалось загрузить организации',
       )
       setOrgs([])
     } finally {
@@ -210,9 +205,7 @@ export function OrganizationsPanel({
       setDetail(data)
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : 'Не удалось загрузить организацию',
+        err instanceof Error ? err.message : 'Не удалось загрузить организацию',
       )
       setDetail(null)
     } finally {
@@ -253,9 +246,7 @@ export function OrganizationsPanel({
       setSelectedId(created.id)
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : 'Не удалось создать организацию',
+        err instanceof Error ? err.message : 'Не удалось создать организацию',
       )
     } finally {
       setBusyKey(null)
@@ -281,9 +272,7 @@ export function OrganizationsPanel({
       await loadDetail(detail.id)
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : 'Не удалось создать приглашение',
+        err instanceof Error ? err.message : 'Не удалось создать приглашение',
       )
     } finally {
       setBusyKey(null)
@@ -323,9 +312,7 @@ export function OrganizationsPanel({
       await loadDetail(detail.id)
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : 'Не удалось отозвать приглашение',
+        err instanceof Error ? err.message : 'Не удалось отозвать приглашение',
       )
     } finally {
       setBusyKey(null)
@@ -343,9 +330,7 @@ export function OrganizationsPanel({
       await updateOrganizationMemberRole(detail.id, member.userId, nextRole)
       await loadDetail(detail.id)
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Не удалось изменить роль',
-      )
+      setError(err instanceof Error ? err.message : 'Не удалось изменить роль')
     } finally {
       setBusyKey(null)
     }
@@ -395,9 +380,7 @@ export function OrganizationsPanel({
       await loadList()
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : 'Не удалось удалить организацию',
+        err instanceof Error ? err.message : 'Не удалось удалить организацию',
       )
     } finally {
       setBusyKey(null)
@@ -603,7 +586,9 @@ export function OrganizationsPanel({
                       color="primary"
                       size="small"
                       disabled={busyKey !== null}
-                      startIcon={<ContentCopyRoundedIcon sx={{ fontSize: 18 }} />}
+                      startIcon={
+                        <ContentCopyRoundedIcon sx={{ fontSize: 18 }} />
+                      }
                       onClick={() => void handleInvite()}
                       sx={{ borderRadius: 1.5 }}
                     >
@@ -632,7 +617,11 @@ export function OrganizationsPanel({
                 </Stack>
               </Stack>
 
-              <Stack spacing={1.25} component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
+              <Stack
+                spacing={1.25}
+                component="ul"
+                sx={{ listStyle: 'none', m: 0, p: 0 }}
+              >
                 {detail.members.map((member) => {
                   const showRemove = canRemoveMember(
                     detail.role,
@@ -671,7 +660,11 @@ export function OrganizationsPanel({
                           <Stack
                             direction="row"
                             spacing={0.75}
-                            sx={{ mt: 0.75, alignItems: 'center', flexWrap: 'wrap' }}
+                            sx={{
+                              mt: 0.75,
+                              alignItems: 'center',
+                              flexWrap: 'wrap',
+                            }}
                           >
                             <Chip
                               size="small"
@@ -679,7 +672,10 @@ export function OrganizationsPanel({
                               variant="outlined"
                               label={roleLabel(member.role)}
                             />
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
                               с {formatUpdated(member.createdAt)}
                             </Typography>
                           </Stack>
@@ -714,7 +710,9 @@ export function OrganizationsPanel({
                               color="error"
                               disabled={busyKey !== null}
                               startIcon={
-                                <PersonRemoveRoundedIcon sx={{ fontSize: 18 }} />
+                                <PersonRemoveRoundedIcon
+                                  sx={{ fontSize: 18 }}
+                                />
                               }
                               onClick={() => setRemoveMemberTarget(member)}
                               sx={{ borderRadius: 1.5 }}
@@ -744,7 +742,11 @@ export function OrganizationsPanel({
                     одноразовую ссылку и скопировать её в буфер обмена.
                   </Typography>
                 ) : (
-                  <Stack spacing={1.25} component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
+                  <Stack
+                    spacing={1.25}
+                    component="ul"
+                    sx={{ listStyle: 'none', m: 0, p: 0 }}
+                  >
                     {detail.pendingInvites.map((invite) => (
                       <Paper
                         key={invite.id}
@@ -765,10 +767,16 @@ export function OrganizationsPanel({
                           }}
                         >
                           <Box>
-                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            <Typography
+                              variant="body2"
+                              sx={{ fontWeight: 500 }}
+                            >
                               Истекает {formatUpdated(invite.expiresAt)}
                             </Typography>
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
                               Создано {formatUpdated(invite.createdAt)}
                             </Typography>
                           </Box>

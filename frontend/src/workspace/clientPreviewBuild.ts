@@ -46,7 +46,10 @@ function resolveLocalPath(importer: string, specifier: string): string {
   return `/${out.join('/')}`
 }
 
-function resolveWithExtensions(files: Record<string, string>, path: string): string {
+function resolveWithExtensions(
+  files: Record<string, string>,
+  path: string,
+): string {
   const candidates = [
     path,
     `${path}.tsx`,
@@ -113,7 +116,11 @@ function formatBuildErrors(errors: esbuild.Message[]): string {
     .join('\n')
 }
 
-function htmlFor(js: string, css: string, files: Record<string, string>): string {
+function htmlFor(
+  js: string,
+  css: string,
+  files: Record<string, string>,
+): string {
   return `<!doctype html>
 <html>
   <head>
@@ -204,4 +211,3 @@ export async function buildClientPreview(
     return { ok: false, error: message }
   }
 }
-

@@ -38,4 +38,28 @@ export default defineConfig([
       'prettier/prettier': ['error', { endOfLine: 'auto' }],
     },
   },
+  {
+    files: [
+      'src/theme/ThemeModeProvider.tsx',
+      'src/workspace/EditorPreferencesContext.tsx',
+      'src/workspace/WorkspaceContext.tsx',
+    ],
+    rules: {
+      // Context modules intentionally co-export hooks with their providers.
+      'react-refresh/only-export-components': 'off',
+    },
+  },
+  {
+    files: [
+      'src/workspace/monacoHtmlEnv.ts',
+      'src/workspace/monacoTypeScriptEnv.ts',
+    ],
+    rules: {
+      // monaco-editor language contribution types (typescript/html) resolve as
+      // error under typescript-eslint projectService even when tsc is clean.
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+    },
+  },
 ])

@@ -322,7 +322,10 @@ export function CollabSync({
   useEffect(() => {
     const doc = new Y.Doc()
     ydocRef.current = doc
-    setDocState(doc)
+    // Publish after the effect body so React does not cascade renders synchronously.
+    queueMicrotask(() => {
+      setDocState(doc)
+    })
     let rosterRaf: number | null = null
     const wsUrl = collabWsUrl()
     const socket = io(wsUrl, {
@@ -507,8 +510,10 @@ export function CollabSync({
       doc.off('update', onDocUpdate)
       doc.destroy()
       ydocRef.current = null
-      setDocState(null)
-      setYjsReady(false)
+      queueMicrotask(() => {
+        setDocState(null)
+        setYjsReady(false)
+      })
       socket.disconnect()
       socketRef.current = null
       for (const timer of fileEmitTimersRef.current.values()) {
@@ -618,4 +623,3 @@ export function CollabSync({
     </CollabYDocContext.Provider>
   )
 }
-

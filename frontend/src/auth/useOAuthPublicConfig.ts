@@ -4,8 +4,14 @@ import {
   type OAuthPublicConfig,
 } from '../api/oauthPublicConfig'
 import { oauthRedirectUriForPage } from './oauthRedirectUri'
-import { vkAppId as vkAppIdFromEnv, vkRedirectUri as vkRedirectFromEnv } from './vkPkce'
-import { yandexClientId as yandexFromEnv, yandexRedirectUri as yandexRedirectFromEnv } from './yandexOAuth'
+import {
+  vkAppId as vkAppIdFromEnv,
+  vkRedirectUri as vkRedirectFromEnv,
+} from './vkPkce'
+import {
+  yandexClientId as yandexFromEnv,
+  yandexRedirectUri as yandexRedirectFromEnv,
+} from './yandexOAuth'
 
 export type ResolvedOAuthConfig = {
   vkAppId: number | null

@@ -160,9 +160,7 @@ export function PresetEditPage({
         files: exported.files,
         solutionFiles: exported.solutionFiles,
         visibility,
-        ...(visibility === 'organization'
-          ? { organizationId }
-          : {}),
+        ...(visibility === 'organization' ? { organizationId } : {}),
       })
       onBackToList()
     } catch (err) {
@@ -310,7 +308,11 @@ export function PresetEditPage({
             spacing={1.5}
             sx={{ alignItems: 'stretch' }}
           >
-            <FormControl size="small" sx={{ minWidth: 200, flex: 1 }} disabled={formDisabled}>
+            <FormControl
+              size="small"
+              sx={{ minWidth: 200, flex: 1 }}
+              disabled={formDisabled}
+            >
               <InputLabel id="edit-preset-visibility-label">
                 Видимость
               </InputLabel>

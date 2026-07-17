@@ -30,7 +30,10 @@ export function EditorFileBreadcrumb({ filePath }: { filePath: string }) {
             key={`${index}-${segment}`}
             className="playground__editorBreadcrumbItem"
           >
-            <span className="playground__editorBreadcrumbFolder" title={segment}>
+            <span
+              className="playground__editorBreadcrumbFolder"
+              title={segment}
+            >
               {segment}
             </span>
             <NavigateNextRoundedIcon

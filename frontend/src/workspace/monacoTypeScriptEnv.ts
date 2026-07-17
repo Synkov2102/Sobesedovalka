@@ -1,13 +1,10 @@
-import type { OnMount } from '@monaco-editor/react'
-
-type MonacoMountApi = Parameters<OnMount>[1]
-
 import csstypeDts from '../../node_modules/csstype/index.d.ts?raw'
 import reactGlobalDts from '../../node_modules/@types/react/global.d.ts?raw'
 import reactIndexDts from '../../node_modules/@types/react/index.d.ts?raw'
 import reactJsxRuntimeDts from '../../node_modules/@types/react/jsx-runtime.d.ts?raw'
 import reactDomIndexDts from '../../node_modules/@types/react-dom/index.d.ts?raw'
 import reactDomClientDts from '../../node_modules/@types/react-dom/client.d.ts?raw'
+import type { MonacoApi } from './monacoApi'
 
 const TYPE_ROOT = 'file:///node_modules'
 
@@ -26,16 +23,25 @@ const EXTRA_LIBS: ReadonlyArray<{ uri: string; content: string }> = [
   { uri: `${TYPE_ROOT}/csstype/index.d.ts`, content: csstypeDts },
   { uri: `${TYPE_ROOT}/@types/react/global.d.ts`, content: reactGlobalDts },
   { uri: `${TYPE_ROOT}/@types/react/index.d.ts`, content: reactIndexDts },
-  { uri: `${TYPE_ROOT}/@types/react/jsx-runtime.d.ts`, content: reactJsxRuntimeDts },
-  { uri: `${TYPE_ROOT}/@types/react-dom/index.d.ts`, content: reactDomIndexDts },
-  { uri: `${TYPE_ROOT}/@types/react-dom/client.d.ts`, content: reactDomClientDts },
+  {
+    uri: `${TYPE_ROOT}/@types/react/jsx-runtime.d.ts`,
+    content: reactJsxRuntimeDts,
+  },
+  {
+    uri: `${TYPE_ROOT}/@types/react-dom/index.d.ts`,
+    content: reactDomIndexDts,
+  },
+  {
+    uri: `${TYPE_ROOT}/@types/react-dom/client.d.ts`,
+    content: reactDomClientDts,
+  },
   {
     uri: `${TYPE_ROOT}/@types/sobesedovalka-sandbox/stubs.d.ts`,
     content: SANDBOX_MODULE_STUBS,
   },
 ]
 
-export function configureMonacoTypeScript(monaco: MonacoMountApi): void {
+export function configureMonacoTypeScript(monaco: MonacoApi): void {
   const ts = monaco.languages.typescript
   const sharedCompilerOptions = {
     jsx: ts.JsxEmit.ReactJSX,

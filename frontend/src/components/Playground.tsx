@@ -146,8 +146,15 @@ export function Playground({ onInvalidExplicitRoom }: PlaygroundProps) {
 
   return (
     <WorkspaceProvider initialFiles={mergeWorkspaceFiles()}>
-      <CollabSync room={roomId} clientId={collabClientId} onRoster={onCollabRoster}>
-        <div className="playground playground--fill" style={{ position: 'relative' }}>
+      <CollabSync
+        room={roomId}
+        clientId={collabClientId}
+        onRoster={onCollabRoster}
+      >
+        <div
+          className="playground playground--fill"
+          style={{ position: 'relative' }}
+        >
           <PlaygroundSolutionPanel roomId={roomId} />
           <PeerCaretsOverlay selfId={collabClientId} peers={collabPeers} />
           <div className="playground__providerInner">
@@ -166,4 +173,3 @@ export function Playground({ onInvalidExplicitRoom }: PlaygroundProps) {
     </WorkspaceProvider>
   )
 }
-

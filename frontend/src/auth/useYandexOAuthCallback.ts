@@ -9,7 +9,9 @@ import {
 } from './yandexOAuth'
 
 /** Завершает вход после редиректа с oauth.yandex.com. */
-export function useYandexOAuthCallback(onError?: (message: string) => void): void {
+export function useYandexOAuthCallback(
+  onError?: (message: string) => void,
+): void {
   const { loginWithYandex } = useAuth()
   const startedRef = useRef(false)
 

@@ -21,9 +21,7 @@ export function collabSyncTextMeta(content: string): {
 } {
   const normalized = content.replace(/\r\n/g, '\n')
   const preview =
-    normalized.length <= 80
-      ? normalized
-      : `${normalized.slice(0, 80)}…`
+    normalized.length <= 80 ? normalized : `${normalized.slice(0, 80)}…`
   return { len: normalized.length, preview }
 }
 

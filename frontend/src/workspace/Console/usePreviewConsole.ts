@@ -26,13 +26,12 @@ export function usePreviewConsole(
   previewIframeRef: RefObject<HTMLIFrameElement | null>,
 ) {
   const [isConsoleOpen, setIsConsoleOpen] = useState(false)
-  const [consoleEntries, setConsoleEntries] = useState<PreviewConsoleEntry[]>([])
-  const clearConsole = useCallback(() => setConsoleEntries([]), [])
-  const resetConsole = useCallback(() => setConsoleEntries([]), [])
-  const toggleConsole = useCallback(
-    () => setIsConsoleOpen((open) => !open),
+  const [consoleEntries, setConsoleEntries] = useState<PreviewConsoleEntry[]>(
     [],
   )
+  const clearConsole = useCallback(() => setConsoleEntries([]), [])
+  const resetConsole = useCallback(() => setConsoleEntries([]), [])
+  const toggleConsole = useCallback(() => setIsConsoleOpen((open) => !open), [])
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {

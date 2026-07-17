@@ -213,7 +213,11 @@ export function PresetCreatePage({ onBackToList }: PresetCreatePageProps) {
             spacing={1.5}
             sx={{ alignItems: 'stretch' }}
           >
-            <FormControl size="small" sx={{ minWidth: 200, flex: 1 }} disabled={formDisabled}>
+            <FormControl
+              size="small"
+              sx={{ minWidth: 200, flex: 1 }}
+              disabled={formDisabled}
+            >
               <InputLabel id="create-preset-visibility-label">
                 Видимость
               </InputLabel>
@@ -225,7 +229,10 @@ export function PresetCreatePage({ onBackToList }: PresetCreatePageProps) {
                 onChange={handleVisibilityChange}
               >
                 <MenuItem value="private">Только я</MenuItem>
-                <MenuItem value="organization" disabled={organizations.length === 0 && !orgsLoading}>
+                <MenuItem
+                  value="organization"
+                  disabled={organizations.length === 0 && !orgsLoading}
+                >
                   Организация
                 </MenuItem>
               </Select>
@@ -237,7 +244,9 @@ export function PresetCreatePage({ onBackToList }: PresetCreatePageProps) {
                 disabled={formDisabled || orgsLoading}
                 required
               >
-                <InputLabel id="create-preset-org-label">Организация</InputLabel>
+                <InputLabel id="create-preset-org-label">
+                  Организация
+                </InputLabel>
                 <Select
                   labelId="create-preset-org-label"
                   id="create-preset-org"

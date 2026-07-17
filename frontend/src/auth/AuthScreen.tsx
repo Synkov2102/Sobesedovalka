@@ -131,9 +131,8 @@ export function AuthScreen() {
             <>
               {!oauth.vkAppId ? (
                 <Alert severity="warning" sx={{ mb: 0 }}>
-                  Не задан ID приложения VK (
-                  <code>VK_CLIENT_ID</code> в <code>backend/.env</code> или на
-                  бэкенде в Docker).
+                  Не задан ID приложения VK (<code>VK_CLIENT_ID</code> в{' '}
+                  <code>backend/.env</code> или на бэкенде в Docker).
                 </Alert>
               ) : (
                 <VkOneTapLogin

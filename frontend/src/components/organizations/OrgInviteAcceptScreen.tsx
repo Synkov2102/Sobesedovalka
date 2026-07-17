@@ -57,9 +57,7 @@ export function OrgInviteAcceptScreen({
       setPreview(data)
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : 'Не удалось загрузить приглашение',
+        err instanceof Error ? err.message : 'Не удалось загрузить приглашение',
       )
       setPreview(null)
     } finally {
@@ -79,9 +77,7 @@ export function OrgInviteAcceptScreen({
       onAccepted(organizationId)
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : 'Не удалось принять приглашение',
+        err instanceof Error ? err.message : 'Не удалось принять приглашение',
       )
     } finally {
       setBusy(false)
@@ -191,7 +187,11 @@ export function OrgInviteAcceptScreen({
                     sx={{ borderRadius: 1.5, minWidth: 140 }}
                   >
                     {busy ? (
-                      <CircularProgress color="inherit" size={22} thickness={5} />
+                      <CircularProgress
+                        color="inherit"
+                        size={22}
+                        thickness={5}
+                      />
                     ) : (
                       'Вступить'
                     )}

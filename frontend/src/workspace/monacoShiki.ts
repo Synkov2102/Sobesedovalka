@@ -1,16 +1,9 @@
 import { shikiToMonaco } from '@shikijs/monaco'
-import type { OnMount } from '@monaco-editor/react'
 import { createHighlighter, type Highlighter } from 'shiki'
 import { EDITOR_SHIKI_THEMES } from './editorPreferences'
+import type { MonacoApi } from './monacoApi'
 
-type MonacoMountApi = Parameters<OnMount>[1]
-const SHIKI_LANGS = [
-  'typescript',
-  'javascript',
-  'css',
-  'html',
-  'json',
-] as const
+const SHIKI_LANGS = ['typescript', 'javascript', 'css', 'html', 'json'] as const
 
 let highlighterPromise: Promise<Highlighter> | null = null
 let shikiApplied = false
@@ -23,7 +16,7 @@ async function getHighlighter(): Promise<Highlighter> {
   return highlighterPromise
 }
 
-export async function configureMonacoShiki(monaco: MonacoMountApi): Promise<void> {
+export async function configureMonacoShiki(monaco: MonacoApi): Promise<void> {
   if (shikiApplied) {
     return
   }

@@ -78,7 +78,9 @@ export function parseCollabFilePath(raw: string): string | null {
 
 export function parseRemoteFileWire(
   wire: RemoteFileWire,
-): { ok: true; value: RemoteFilePayload } | { ok: false; reason: CollabFileRejectReason } {
+):
+  | { ok: true; value: RemoteFilePayload }
+  | { ok: false; reason: CollabFileRejectReason } {
   if (typeof wire.path !== 'string' || typeof wire.content !== 'string') {
     return { ok: false, reason: 'invalid-wire' }
   }
@@ -89,7 +91,10 @@ export function parseRemoteFileWire(
   if (!path) {
     return {
       ok: false,
-      reason: typeof wire.path === 'string' && wire.path.trim() ? 'unsafe-path' : 'empty-path',
+      reason:
+        typeof wire.path === 'string' && wire.path.trim()
+          ? 'unsafe-path'
+          : 'empty-path',
     }
   }
   const from =

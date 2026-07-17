@@ -12,7 +12,10 @@ import {
   mergeWorkspaceFiles,
   workspaceFilesSignature,
 } from '../../workspace/workspaceDefaults'
-import { WorkspaceProvider, useWorkspace } from '../../workspace/WorkspaceContext'
+import {
+  WorkspaceProvider,
+  useWorkspace,
+} from '../../workspace/WorkspaceContext'
 import { WorkspaceCollabFsBridge } from '../../workspace/WorkspaceCollabFsBridge'
 import { MonacoCodeEditor } from '../../workspace/MonacoCodeEditor'
 import { ClientPreview } from '../../workspace/ClientPreview'
@@ -112,13 +115,13 @@ export const PresetSandpackWorkspace = forwardRef<
     }
   }, [initialFiles, initialSolutionFiles])
 
-  const files = useMemo(
-    () => mergeWorkspaceFiles(mergedStored),
-    [mergedStored],
-  )
+  const files = useMemo(() => mergeWorkspaceFiles(mergedStored), [mergedStored])
   const key = useMemo(() => workspaceFilesSignature(files), [files])
   const initialSolutionPaths = useMemo(
-    () => Object.keys(initialSolutionFiles ?? {}).sort((a, b) => a.localeCompare(b)),
+    () =>
+      Object.keys(initialSolutionFiles ?? {}).sort((a, b) =>
+        a.localeCompare(b),
+      ),
     [initialSolutionFiles],
   )
 

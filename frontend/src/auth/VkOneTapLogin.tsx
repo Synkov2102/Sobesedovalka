@@ -84,7 +84,7 @@ export function VkOneTapLogin({
               typeof p.device_id !== 'string' ||
               typeof p.state !== 'string'
             ) {
-              onErrorRef.current('Некорректный ответ VK ID');
+              onErrorRef.current('Некорректный ответ VK ID')
               return
             }
             onSuccessRef.current({
@@ -96,7 +96,9 @@ export function VkOneTapLogin({
       } catch (e) {
         if (!cancelled) {
           onErrorRef.current(
-            e instanceof Error ? e.message : 'Не удалось инициализировать VK ID',
+            e instanceof Error
+              ? e.message
+              : 'Не удалось инициализировать VK ID',
           )
         }
       }

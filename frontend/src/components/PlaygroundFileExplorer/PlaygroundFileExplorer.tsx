@@ -377,7 +377,11 @@ export function PlaygroundFileExplorer({
   }, [contextMenu, deletePath])
 
   const handleToggleSolutionContextFile = useCallback(() => {
-    if (!contextMenu || contextMenu.target.kind !== 'file' || !onToggleSolution) {
+    if (
+      !contextMenu ||
+      contextMenu.target.kind !== 'file' ||
+      !onToggleSolution
+    ) {
       return
     }
     onToggleSolution(contextMenu.target.path)

@@ -92,7 +92,9 @@ const STORAGE_FONT = 'sobesedovalka-editor-font'
 const shikiThemeSet = new Set<string>(EDITOR_SHIKI_THEMES)
 const fontIdSet = new Set<string>(EDITOR_FONT_OPTIONS.map((f) => f.id))
 
-export function isEditorShikiThemeId(value: string): value is EditorShikiThemeId {
+export function isEditorShikiThemeId(
+  value: string,
+): value is EditorShikiThemeId {
   return shikiThemeSet.has(value)
 }
 
@@ -108,7 +110,9 @@ export function readEditorColorThemePreference(): EditorColorThemePreference {
   return 'app'
 }
 
-export function writeEditorColorThemePreference(value: EditorColorThemePreference): void {
+export function writeEditorColorThemePreference(
+  value: EditorColorThemePreference,
+): void {
   try {
     localStorage.setItem(STORAGE_COLOR_THEME, value)
   } catch {

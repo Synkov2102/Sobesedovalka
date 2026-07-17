@@ -1,10 +1,8 @@
-import type { OnMount } from '@monaco-editor/react'
-
-type MonacoMountApi = Parameters<OnMount>[1]
+import type { MonacoApi } from './monacoApi'
 
 let configured = false
 
-export function configureMonacoHtml(monaco: MonacoMountApi): void {
+export function configureMonacoHtml(monaco: MonacoApi): void {
   if (configured) {
     return
   }

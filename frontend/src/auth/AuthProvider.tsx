@@ -102,7 +102,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAccessToken(r.accessToken)
         setUser(r.user)
       } catch (e) {
-        setAuthError(e instanceof Error ? e.message : 'Ошибка входа через Яндекс')
+        setAuthError(
+          e instanceof Error ? e.message : 'Ошибка входа через Яндекс',
+        )
         throw e
       }
     },

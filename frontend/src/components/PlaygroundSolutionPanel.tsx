@@ -189,8 +189,7 @@ export function PlaygroundSolutionPanel({
                 m: 0,
                 p: 2,
                 overflow: 'auto',
-                fontFamily:
-                  'ui-monospace, SFMono-Regular, Consolas, monospace',
+                fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace',
                 fontSize: '0.8rem',
                 lineHeight: 1.5,
                 whiteSpace: 'pre-wrap',

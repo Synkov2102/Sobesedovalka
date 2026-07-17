@@ -21,7 +21,9 @@ export function YandexLoginButton({
       disabled={disabled}
       onClick={() => {
         void startYandexLogin({ clientId, redirectUri }).catch((e: unknown) => {
-          onError(e instanceof Error ? e.message : 'Не удалось открыть Яндекс OAuth')
+          onError(
+            e instanceof Error ? e.message : 'Не удалось открыть Яндекс OAuth',
+          )
         })
       }}
       sx={{

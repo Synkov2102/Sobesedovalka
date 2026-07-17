@@ -1,7 +1,8 @@
-import Editor, { type OnMount } from '@monaco-editor/react'
+import Editor from '@monaco-editor/react'
 import { useTheme } from '@mui/material/styles'
 import { useEffect, useMemo, useRef } from 'react'
-import type * as monaco from 'monaco-editor'
+import type { editor } from 'monaco-editor'
+import type { MonacoApi } from './monacoApi'
 import { getYFileText } from '../collab/collabYjsModel'
 import {
   bindMonacoModelToYText,
@@ -69,8 +70,8 @@ function MonacoCodeEditorInner() {
   const { doc, synced } = useCollabYDoc()
   const paste = useCollabPaste()
   const fileSync = useCollabFileSync()
-  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
-  const monacoApiRef = useRef<Parameters<OnMount>[1] | null>(null)
+  const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
+  const monacoApiRef = useRef<MonacoApi | null>(null)
   const yjsBindingRef = useRef<MonacoYjsBindingHandle | null>(null)
   const applyingWorkspaceRef = useRef(false)
   const activeFile = workspace.activeFile
@@ -79,11 +80,11 @@ function MonacoCodeEditorInner() {
   const editorThemeRef = useRef(editorTheme)
   editorThemeRef.current = editorTheme
 
-  const applyEditorTheme = (monacoApi: Parameters<OnMount>[1]) => {
+  const applyEditorTheme = (monacoApi: MonacoApi) => {
     monacoApi.editor.setTheme(editorThemeRef.current)
   }
 
-  const handleBeforeMount = async (monacoApi: Parameters<OnMount>[1]) => {
+  const handleBeforeMount = async (monacoApi: MonacoApi) => {
     await configureMonacoShiki(monacoApi)
     configureMonacoTypeScript(monacoApi)
     configureMonacoHtml(monacoApi)
@@ -174,7 +175,10 @@ function MonacoCodeEditorInner() {
     }
   }, [activeFile, doc, synced, value])
 
-  const handleMount: OnMount = (editor, monacoApi) => {
+  const handleMount = (
+    editor: editor.IStandaloneCodeEditor,
+    monacoApi: MonacoApi,
+  ) => {
     monacoApiRef.current = monacoApi
     editorRef.current = editor
     applyEditorTheme(monacoApi)

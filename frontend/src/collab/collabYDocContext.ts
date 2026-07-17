@@ -14,4 +14,3 @@ export const CollabYDocContext = createContext<CollabYDocContextValue>({
 export function useCollabYDoc(): CollabYDocContextValue {
   return useContext(CollabYDocContext)
 }
-

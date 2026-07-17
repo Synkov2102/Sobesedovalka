@@ -39,7 +39,9 @@ export function EditorPreferencesProvider({
   appMode: PaletteMode
   children: ReactNode
 }) {
-  const [colorTheme, setColorThemeState] = useState(readEditorColorThemePreference)
+  const [colorTheme, setColorThemeState] = useState(
+    readEditorColorThemePreference,
+  )
   const [fontId, setFontIdState] = useState(readEditorFontId)
 
   const setColorTheme = useCallback((value: EditorColorThemePreference) => {
