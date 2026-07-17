@@ -53,13 +53,19 @@ export default defineConfig([
     files: [
       'src/workspace/monacoHtmlEnv.ts',
       'src/workspace/monacoTypeScriptEnv.ts',
+      'src/workspace/monacoWorkspaceModels.ts',
+      'src/workspace/monacoShiki.ts',
+      'src/workspace/MonacoCodeEditor.tsx',
     ],
     rules: {
-      // monaco-editor language contribution types (typescript/html) resolve as
-      // error under typescript-eslint projectService even when tsc is clean.
+      // Monaco types from @monaco-editor/react resolve as error under
+      // typescript-eslint projectService even when tsc is clean.
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-call': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-redundant-type-constituents': 'off',
     },
   },
 ])

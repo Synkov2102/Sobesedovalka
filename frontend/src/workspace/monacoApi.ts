@@ -1,4 +1,4 @@
-import type * as MonacoNS from 'monaco-editor'
+import type { Monaco } from '@monaco-editor/react'
 
-/** Monaco namespace API from `onMount` / `beforeMount` (avoids broken OnMount inference in ESLint). */
-export type MonacoApi = typeof MonacoNS
+/** Monaco namespace API from `onMount` / `beforeMount`. */
+export type MonacoApi = Monaco
