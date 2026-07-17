@@ -1,7 +1,8 @@
 import * as Y from 'yjs';
 import { CollabGateway } from './collab.gateway';
 
-type GatewayInternals = CollabGateway & {
+/** Private maps accessed via cast — do not intersect with CollabGateway (private fields → never). */
+type GatewayInternals = {
   socketMeta: Map<string, { room: string; clientId: string }>;
   roomPeers: Map<string, Map<string, { displayName: string }>>;
   roomYDocs: Map<string, Y.Doc>;
@@ -22,21 +23,21 @@ describe('CollabGateway legacy editor sync', () => {
       {} as never,
     );
     const emit = jest.fn();
+    const to = jest.fn(() => ({ emit }));
 
-    (gateway as never as { server: { to: jest.Mock } }).server = {
-      to: jest.fn(() => ({ emit })),
-    };
+    (gateway as never as { server: { to: jest.Mock } }).server = { to };
 
     return {
       gateway,
       internals: gateway as unknown as GatewayInternals,
       mongoRepo,
       emit,
+      to,
     };
   }
 
   it('rejects full-file collab-file updates once Yjs is active for the room', () => {
-    const { gateway, internals, emit } = createGateway();
+    const { gateway, internals, emit, to } = createGateway();
     const room = 'room-1';
     const clientId = 'client-1';
     const socket = { id: 'socket-1' };
@@ -55,12 +56,12 @@ describe('CollabGateway legacy editor sync', () => {
     );
 
     expect(internals.roomFiles.has(room)).toBe(false);
-    expect(gateway.server.to).not.toHaveBeenCalled();
+    expect(to).not.toHaveBeenCalled();
     expect(emit).not.toHaveBeenCalled();
   });
 
   it('rejects legacy remove updates once Yjs is active for the room', () => {
-    const { gateway, internals, mongoRepo, emit } = createGateway();
+    const { gateway, internals, mongoRepo, emit, to } = createGateway();
     const room = 'room-1';
     const clientId = 'client-1';
     const socket = { id: 'socket-1' };
@@ -80,12 +81,12 @@ describe('CollabGateway legacy editor sync', () => {
 
     expect(mongoRepo.deleteFile).not.toHaveBeenCalled();
     expect(internals.roomFiles.get(room)?.has('/App.tsx')).toBe(true);
-    expect(gateway.server.to).not.toHaveBeenCalled();
+    expect(to).not.toHaveBeenCalled();
     expect(emit).not.toHaveBeenCalled();
   });
 
   it('rejects legacy folder sync once Yjs is active for the room', () => {
-    const { gateway, internals, mongoRepo, emit } = createGateway();
+    const { gateway, internals, mongoRepo, emit, to } = createGateway();
     const room = 'room-1';
 
     internals.roomYDocs.set(room, new Y.Doc());
@@ -96,7 +97,7 @@ describe('CollabGateway legacy editor sync', () => {
     });
 
     expect(mongoRepo.replaceRoomFolders).not.toHaveBeenCalled();
-    expect(gateway.server.to).not.toHaveBeenCalled();
+    expect(to).not.toHaveBeenCalled();
     expect(emit).not.toHaveBeenCalled();
   });
 
@@ -112,7 +113,10 @@ describe('CollabGateway legacy editor sync', () => {
       doc.getText('file:/App.tsx').insert(0, 'fresh text');
     });
     internals.socketMeta.set(socket.id, { room, clientId });
-    internals.roomPeers.set(room, new Map([[clientId, { displayName: 'User' }]]));
+    internals.roomPeers.set(
+      room,
+      new Map([[clientId, { displayName: 'User' }]]),
+    );
     internals.roomYDocs.set(room, doc);
 
     gateway.handleDisconnect(socket as never);
