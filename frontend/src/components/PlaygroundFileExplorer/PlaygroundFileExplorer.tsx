@@ -46,8 +46,13 @@ const FILE_EXPLORER_HINT =
 
 export function PlaygroundFileExplorer({
   collabPeers = [],
+  solutionPaths,
+  onToggleSolution,
 }: {
   collabPeers?: CollabPeerDTO[]
+  /** Paths marked as hidden solution (preset editor only). */
+  solutionPaths?: ReadonlySet<string>
+  onToggleSolution?: (path: string) => void
 } = {}) {
   const workspace = useWorkspace()
   const {
@@ -371,6 +376,14 @@ export function PlaygroundFileExplorer({
     deletePath(contextMenu.target)
   }, [contextMenu, deletePath])
 
+  const handleToggleSolutionContextFile = useCallback(() => {
+    if (!contextMenu || contextMenu.target.kind !== 'file' || !onToggleSolution) {
+      return
+    }
+    onToggleSolution(contextMenu.target.path)
+    closeContextMenu()
+  }, [closeContextMenu, contextMenu, onToggleSolution])
+
   const handleDropToFolder = useCallback(
     (targetFolderPath: string) => {
       if (!dragItem) {
@@ -458,6 +471,7 @@ export function PlaygroundFileExplorer({
         handleDropToFolder,
         renderDraftRowAtDepth: renderDraftRow,
         FileTypeIcon,
+        isSolution: solutionPaths?.has(file.path) === true,
       })
     },
     [
@@ -469,6 +483,7 @@ export function PlaygroundFileExplorer({
       openContextMenu,
       peersByActiveFile,
       renderDraftRow,
+      solutionPaths,
       workspace.openFile,
     ],
   )
@@ -576,6 +591,10 @@ export function PlaygroundFileExplorer({
         handleDeleteContextFile={handleDeleteContextFile}
         canRenameFolder={canRenameFolder}
         canRenameFile={canRenameFile}
+        solutionPaths={solutionPaths}
+        onToggleSolution={
+          onToggleSolution ? handleToggleSolutionContextFile : undefined
+        }
       />
     </div>
   )

@@ -5,6 +5,7 @@ import { CollabSync } from './CollabSync'
 import { PeerCaretsOverlay } from './PeerCaretsOverlay'
 import { PlaygroundCollabBar } from './PlaygroundCollabBar'
 import { PlaygroundFileExplorer } from './PlaygroundFileExplorer'
+import { PlaygroundSolutionPanel } from './PlaygroundSolutionPanel'
 import { v4 as uuidv4 } from 'uuid'
 import { WorkspaceProvider } from '../workspace/WorkspaceContext'
 import { mergeWorkspaceFiles } from '../workspace/workspaceDefaults'
@@ -146,7 +147,8 @@ export function Playground({ onInvalidExplicitRoom }: PlaygroundProps) {
   return (
     <WorkspaceProvider initialFiles={mergeWorkspaceFiles()}>
       <CollabSync room={roomId} clientId={collabClientId} onRoster={onCollabRoster}>
-        <div className="playground playground--fill">
+        <div className="playground playground--fill" style={{ position: 'relative' }}>
+          <PlaygroundSolutionPanel roomId={roomId} />
           <PeerCaretsOverlay selfId={collabClientId} peers={collabPeers} />
           <div className="playground__providerInner">
             <ResizableWorkspace>

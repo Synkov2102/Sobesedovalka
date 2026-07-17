@@ -1,13 +1,19 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { CollabModule } from '../collab/collab.module';
+import { OrganizationsModule } from '../organizations/organizations.module';
 import { TaskPresetsController } from './task-presets.controller';
 import { TaskPresetsRepository } from './task-presets.repository';
 import { TaskPresetsService } from './task-presets.service';
 
 @Module({
-  imports: [AuthModule, CollabModule],
+  imports: [
+    AuthModule,
+    CollabModule,
+    forwardRef(() => OrganizationsModule),
+  ],
   controllers: [TaskPresetsController],
   providers: [TaskPresetsRepository, TaskPresetsService],
+  exports: [TaskPresetsRepository],
 })
 export class TaskPresetsModule {}

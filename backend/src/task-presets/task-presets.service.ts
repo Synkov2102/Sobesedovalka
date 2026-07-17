@@ -2,10 +2,14 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { CollabMongoRepository } from '../collab/collab-mongo.repository';
 import { normalizeSandpackFilePath } from '../collab/sandpack-paths';
+import { OrganizationsService } from '../organizations/organizations.service';
 import { CreateTaskPresetDto } from './dto/create-task-preset.dto';
 import { UpdateTaskPresetDto } from './dto/update-task-preset.dto';
 import { TaskPresetsRepository } from './task-presets.repository';
@@ -13,6 +17,7 @@ import type {
   TaskPresetDoc,
   TaskPresetFileMap,
   TaskPresetView,
+  TaskPresetVisibility,
 } from './task-presets.types';
 
 function normalizeFolderPath(path: string): string {
@@ -29,19 +34,31 @@ export class TaskPresetsService {
   constructor(
     private readonly repo: TaskPresetsRepository,
     private readonly collabRepo: CollabMongoRepository,
+    @Inject(forwardRef(() => OrganizationsService))
+    private readonly organizations: OrganizationsService,
   ) {}
 
   async list(userId: string): Promise<TaskPresetView[]> {
-    const docs = await this.repo.listByUser(userId);
-    return docs.map((doc) => this.toView(doc));
+    const orgIds = await this.organizations.listOrganizationIdsForUser(userId);
+    const docs = await this.repo.listVisibleToUser(userId, orgIds);
+    const nameByOrg = await this.organizations.getOrganizationNames(
+      docs
+        .map((d) => d.organizationId)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0),
+    );
+    return docs.map((doc) =>
+      this.toView(doc, userId, nameByOrg.get(doc.organizationId ?? '')),
+    );
   }
 
   async getOne(userId: string, id: string): Promise<TaskPresetView> {
-    const doc = await this.repo.findByIdForUser(id, userId);
-    if (!doc) {
-      throw new NotFoundException('Preset not found');
-    }
-    return this.toView(doc);
+    const doc = await this.requireReadablePreset(userId, id);
+    const organizationName = doc.organizationId
+      ? (await this.organizations.getOrganizationNames([doc.organizationId])).get(
+          doc.organizationId,
+        )
+      : undefined;
+    return this.toView(doc, userId, organizationName);
   }
 
   async create(
@@ -49,6 +66,15 @@ export class TaskPresetsService {
     dto: CreateTaskPresetDto,
   ): Promise<TaskPresetView> {
     const normalized = this.normalizePresetFiles(dto.files);
+    const solutionFiles = this.normalizeOptionalSolutionFiles(
+      dto.solutionFiles,
+      normalized.files,
+    );
+    const sharing = await this.resolveSharing(userId, {
+      visibility: dto.visibility ?? 'private',
+      organizationId: dto.organizationId,
+    });
+
     const now = new Date().toISOString();
     const doc: TaskPresetDoc = {
       _id: randomUUID(),
@@ -57,11 +83,21 @@ export class TaskPresetsService {
       description: dto.description ?? '',
       files: normalized.files,
       folders: normalized.folders,
+      visibility: sharing.visibility,
+      ...(sharing.organizationId
+        ? { organizationId: sharing.organizationId }
+        : {}),
+      solutionFiles,
       createdAt: now,
       updatedAt: now,
     };
     await this.repo.create(doc);
-    return this.toView(doc);
+    const organizationName = doc.organizationId
+      ? (await this.organizations.getOrganizationNames([doc.organizationId])).get(
+          doc.organizationId,
+        )
+      : undefined;
+    return this.toView(doc, userId, organizationName);
   }
 
   async update(
@@ -82,24 +118,71 @@ export class TaskPresetsService {
       folders = normalized.folders;
     }
 
+    let solutionFiles = current.solutionFiles ?? {};
+    if (dto.solutionFiles) {
+      solutionFiles = this.normalizeOptionalSolutionFiles(
+        dto.solutionFiles,
+        files,
+      );
+    } else {
+      this.assertNoPathOverlap(files, solutionFiles);
+    }
+
+    const sharing = await this.resolveSharing(userId, {
+      visibility: dto.visibility ?? current.visibility ?? 'private',
+      organizationId:
+        dto.organizationId !== undefined
+          ? dto.organizationId
+          : current.organizationId,
+    });
+
+    const updatedAt = new Date().toISOString();
     const updated: TaskPresetDoc = {
       ...current,
       title: dto.title ?? current.title,
       description: dto.description ?? current.description,
       files,
       folders,
-      updatedAt: new Date().toISOString(),
+      visibility: sharing.visibility,
+      solutionFiles,
+      updatedAt,
     };
+    if (sharing.organizationId) {
+      updated.organizationId = sharing.organizationId;
+    } else {
+      delete updated.organizationId;
+    }
 
-    await this.repo.updateForUser(id, userId, {
+    const patch: Partial<
+      Omit<TaskPresetDoc, '_id' | 'userId' | 'createdAt'>
+    > = {
       title: updated.title,
       description: updated.description,
       files: updated.files,
       folders: updated.folders,
-      updatedAt: updated.updatedAt,
-    });
+      visibility: updated.visibility,
+      solutionFiles: updated.solutionFiles,
+      updatedAt,
+    };
+    if (sharing.organizationId) {
+      patch.organizationId = sharing.organizationId;
+    }
 
-    return this.toView(updated);
+    await this.repo.updateForUser(
+      id,
+      userId,
+      patch,
+      sharing.organizationId ? [] : ['organizationId'],
+    );
+
+    const organizationName = updated.organizationId
+      ? (
+          await this.organizations.getOrganizationNames([
+            updated.organizationId,
+          ])
+        ).get(updated.organizationId)
+      : undefined;
+    return this.toView(updated, userId, organizationName);
   }
 
   async remove(userId: string, id: string): Promise<void> {
@@ -107,6 +190,25 @@ export class TaskPresetsService {
     if (!deleted) {
       throw new NotFoundException('Preset not found');
     }
+  }
+
+  async clone(userId: string, id: string): Promise<TaskPresetView> {
+    const source = await this.requireReadablePreset(userId, id);
+    const now = new Date().toISOString();
+    const doc: TaskPresetDoc = {
+      _id: randomUUID(),
+      userId,
+      title: `${source.title} (copy)`,
+      description: source.description,
+      files: { ...source.files },
+      folders: [...source.folders],
+      visibility: 'private',
+      solutionFiles: { ...(source.solutionFiles ?? {}) },
+      createdAt: now,
+      updatedAt: now,
+    };
+    await this.repo.create(doc);
+    return this.toView(doc, userId);
   }
 
   async collabRoomReady(roomId: string): Promise<{ ready: boolean }> {
@@ -122,11 +224,9 @@ export class TaskPresetsService {
   }
 
   async startRoom(userId: string, id: string): Promise<{ roomId: string }> {
-    const preset = await this.repo.findByIdForUser(id, userId);
-    if (!preset) {
-      throw new NotFoundException('Preset not found');
-    }
+    const preset = await this.requireReadablePreset(userId, id);
     const roomId = `preset-${randomUUID()}`;
+    // Seed only starter files — solutions stay on the preset for the host.
     await this.collabRepo.seedRoom(roomId, preset.files, preset.folders);
     await this.collabRepo.setRoomOwnership(roomId, {
       ownerUserId: userId,
@@ -134,6 +234,81 @@ export class TaskPresetsService {
       sourcePresetId: preset._id,
     });
     return { roomId };
+  }
+
+  async getRoomSolution(
+    userId: string,
+    roomId: string,
+  ): Promise<{ solutionFiles: TaskPresetFileMap; title: string }> {
+    const safe = roomId
+      .trim()
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .slice(0, 64);
+    if (!safe) {
+      throw new NotFoundException('Room not found');
+    }
+
+    const belongs = await this.collabRepo.roomBelongsToOwner(safe, userId);
+    if (!belongs) {
+      throw new ForbiddenException('Only the room owner can view the solution');
+    }
+
+    const room = await this.collabRepo.findRoom(safe);
+    if (!room?.sourcePresetId) {
+      throw new NotFoundException('No solution linked to this room');
+    }
+
+    const preset = await this.repo.findById(room.sourcePresetId);
+    if (!preset) {
+      throw new NotFoundException('Source preset not found');
+    }
+
+    return {
+      solutionFiles: { ...(preset.solutionFiles ?? {}) },
+      title: preset.title,
+    };
+  }
+
+  private async requireReadablePreset(
+    userId: string,
+    id: string,
+  ): Promise<TaskPresetDoc> {
+    const doc = await this.repo.findById(id);
+    if (!doc) {
+      throw new NotFoundException('Preset not found');
+    }
+    if (doc.userId === userId) {
+      return this.withDefaults(doc);
+    }
+    if (
+      doc.visibility === 'organization' &&
+      doc.organizationId &&
+      (await this.organizations.isMember(doc.organizationId, userId))
+    ) {
+      return this.withDefaults(doc);
+    }
+    throw new NotFoundException('Preset not found');
+  }
+
+  private async resolveSharing(
+    userId: string,
+    input: {
+      visibility: TaskPresetVisibility;
+      organizationId?: string;
+    },
+  ): Promise<{ visibility: TaskPresetVisibility; organizationId?: string }> {
+    if (input.visibility === 'private') {
+      return { visibility: 'private' };
+    }
+
+    const organizationId = input.organizationId?.trim();
+    if (!organizationId) {
+      throw new BadRequestException(
+        'organizationId is required for organization visibility',
+      );
+    }
+    await this.organizations.assertMember(organizationId, userId);
+    return { visibility: 'organization', organizationId };
   }
 
   private normalizePresetFiles(
@@ -164,6 +339,38 @@ export class TaskPresetsService {
     };
   }
 
+  private normalizeOptionalSolutionFiles(
+    input: Array<{ path: string; content: string }> | undefined,
+    starterFiles: TaskPresetFileMap,
+  ): TaskPresetFileMap {
+    if (!input || input.length === 0) {
+      return {};
+    }
+    const solutionFiles: TaskPresetFileMap = {};
+    for (const entry of input) {
+      const path = normalizeSandpackFilePath(entry.path);
+      if (!path) {
+        throw new BadRequestException('Invalid solution file path');
+      }
+      solutionFiles[path] = entry.content;
+    }
+    this.assertNoPathOverlap(starterFiles, solutionFiles);
+    return solutionFiles;
+  }
+
+  private assertNoPathOverlap(
+    files: TaskPresetFileMap,
+    solutionFiles: TaskPresetFileMap,
+  ): void {
+    for (const path of Object.keys(solutionFiles)) {
+      if (Object.prototype.hasOwnProperty.call(files, path)) {
+        throw new BadRequestException(
+          `Path "${path}" cannot be both a starter and a solution file`,
+        );
+      }
+    }
+  }
+
   private getFoldersForFile(path: string): string[] {
     const parts = path
       .replace(/^\/+/, '')
@@ -180,15 +387,38 @@ export class TaskPresetsService {
     return out;
   }
 
-  private toView(doc: TaskPresetDoc): TaskPresetView {
+  private withDefaults(doc: TaskPresetDoc): TaskPresetDoc {
     return {
-      id: doc._id,
-      title: doc.title,
-      description: doc.description,
-      files: doc.files,
-      folders: [...doc.folders],
-      createdAt: doc.createdAt,
-      updatedAt: doc.updatedAt,
+      ...doc,
+      visibility: doc.visibility ?? 'private',
+      solutionFiles: doc.solutionFiles ?? {},
     };
+  }
+
+  private toView(
+    doc: TaskPresetDoc,
+    userId: string,
+    organizationName?: string,
+  ): TaskPresetView {
+    const normalized = this.withDefaults(doc);
+    const view: TaskPresetView = {
+      id: normalized._id,
+      title: normalized.title,
+      description: normalized.description,
+      files: normalized.files,
+      folders: [...normalized.folders],
+      visibility: normalized.visibility,
+      solutionFiles: { ...normalized.solutionFiles },
+      access: normalized.userId === userId ? 'owner' : 'shared',
+      createdAt: normalized.createdAt,
+      updatedAt: normalized.updatedAt,
+    };
+    if (normalized.organizationId) {
+      view.organizationId = normalized.organizationId;
+    }
+    if (organizationName) {
+      view.organizationName = organizationName;
+    }
+    return view;
   }
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import AddCircleOutlineRoundedIcon from '@mui/icons-material/AddCircleOutlineRounded'
+import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded'
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
 import EditRoundedIcon from '@mui/icons-material/EditRounded'
 import NoteAddRoundedIcon from '@mui/icons-material/NoteAddRounded'
@@ -21,6 +22,7 @@ import {
 } from '@mui/material'
 import { alpha, useTheme } from '@mui/material/styles'
 import {
+  cloneTaskPreset,
   deleteTaskPreset,
   fetchTaskPresets,
   startRoomFromPreset,
@@ -59,6 +61,217 @@ type PresetListPanelProps = {
   onOpenEdit: (presetId: string) => void
 }
 
+type OrgSection = {
+  key: string
+  title: string
+  presets: TaskPreset[]
+}
+
+function PresetCard({
+  preset,
+  busyKey,
+  onStartRoom,
+  onClone,
+  onOpenEdit,
+  onDelete,
+}: {
+  preset: TaskPreset
+  busyKey: string | null
+  onStartRoom: (id: string) => void
+  onClone: (id: string) => void
+  onOpenEdit: (id: string) => void
+  onDelete: (id: string) => void
+}) {
+  const theme = useTheme()
+  const isOwner = preset.access === 'owner'
+  const filePaths = Object.keys(preset.files).sort((a, b) => a.localeCompare(b))
+  const solutionCount = Object.keys(preset.solutionFiles ?? {}).length
+
+  return (
+    <Paper
+      component="li"
+      elevation={0}
+      variant="outlined"
+      sx={{
+        borderRadius: 2,
+        borderColor: 'divider',
+        overflow: 'hidden',
+        transition:
+          'border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease',
+        '&:hover': {
+          borderColor: alpha(theme.palette.primary.main, 0.45),
+          boxShadow: `0 12px 40px ${alpha(theme.palette.common.black, 0.35)}`,
+          bgcolor: alpha(theme.palette.primary.main, 0.03),
+        },
+      }}
+    >
+      <Stack direction="row" sx={{ minHeight: 0 }}>
+        <Box
+          aria-hidden
+          sx={{
+            width: 4,
+            flexShrink: 0,
+            bgcolor: alpha(theme.palette.primary.main, 0.65),
+          }}
+        />
+        <Box sx={{ flex: 1, minWidth: 0, p: 2.25, pl: 2 }}>
+          <Stack spacing={1.75}>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography
+                variant="h6"
+                component="h3"
+                sx={{
+                  fontWeight: 600,
+                  fontSize: '1.05rem',
+                  lineHeight: 1.35,
+                  mb: 0.5,
+                  wordBreak: 'break-word',
+                }}
+              >
+                {preset.title}
+              </Typography>
+              {preset.description ? (
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mt: 0.5, lineHeight: 1.5 }}
+                >
+                  {preset.description}
+                </Typography>
+              ) : null}
+              <Stack
+                direction="row"
+                spacing={0.75}
+                sx={{
+                  mt: 1.25,
+                  mb: 1,
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: 0.75,
+                }}
+              >
+                <ScheduleRoundedIcon
+                  sx={{
+                    fontSize: 18,
+                    color: 'text.secondary',
+                    opacity: 0.85,
+                  }}
+                />
+                <Typography variant="caption" color="text.secondary">
+                  Обновлён {formatPresetUpdated(preset.updatedAt)} ·{' '}
+                  {formatFileCountRu(filePaths.length)}
+                  {solutionCount > 0
+                    ? ` · ${formatFileCountRu(solutionCount)} решения`
+                    : ''}
+                </Typography>
+                <Chip
+                  label={
+                    preset.visibility === 'organization'
+                      ? preset.organizationName
+                        ? `Орг: ${preset.organizationName}`
+                        : 'Организация'
+                      : 'Личный'
+                  }
+                  size="small"
+                  color={
+                    preset.visibility === 'organization' ? 'primary' : 'default'
+                  }
+                  variant="outlined"
+                  sx={{ height: 22, fontSize: '0.7rem' }}
+                />
+              </Stack>
+              <Stack
+                direction="row"
+                spacing={0.75}
+                sx={{ flexWrap: 'wrap', gap: 0.75 }}
+              >
+                {filePaths.map((path) => (
+                  <Chip
+                    key={path}
+                    label={path}
+                    size="small"
+                    variant="outlined"
+                    sx={{
+                      fontFamily:
+                        'ui-monospace, SFMono-Regular, Consolas, monospace',
+                      fontSize: '0.75rem',
+                      height: 'auto',
+                      maxWidth: '100%',
+                      '& .MuiChip-label': {
+                        whiteSpace: 'normal',
+                        wordBreak: 'break-all',
+                        lineHeight: 1.35,
+                        py: 0.35,
+                      },
+                    }}
+                  />
+                ))}
+              </Stack>
+            </Box>
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }}
+              spacing={1}
+              sx={{
+                flexWrap: 'wrap',
+                alignItems: { xs: 'stretch', sm: 'center' },
+              }}
+            >
+              <Button
+                variant="contained"
+                color="primary"
+                size="small"
+                onClick={() => void onStartRoom(preset.id)}
+                disabled={busyKey !== null}
+                startIcon={<PlayArrowRoundedIcon sx={{ fontSize: 20 }} />}
+                sx={{ borderRadius: 1.5 }}
+              >
+                Запустить комнату
+              </Button>
+              {isOwner ? (
+                <>
+                  <Button
+                    variant="outlined"
+                    color="secondary"
+                    size="small"
+                    onClick={() => onOpenEdit(preset.id)}
+                    disabled={busyKey !== null}
+                    startIcon={<EditRoundedIcon sx={{ fontSize: 18 }} />}
+                  >
+                    Редактировать
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    size="small"
+                    onClick={() => void onDelete(preset.id)}
+                    disabled={busyKey !== null}
+                    startIcon={
+                      <DeleteOutlineRoundedIcon sx={{ fontSize: 18 }} />
+                    }
+                  >
+                    Удалить
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="outlined"
+                  color="secondary"
+                  size="small"
+                  onClick={() => void onClone(preset.id)}
+                  disabled={busyKey !== null}
+                  startIcon={<ContentCopyRoundedIcon sx={{ fontSize: 18 }} />}
+                >
+                  Клонировать
+                </Button>
+              )}
+            </Stack>
+          </Stack>
+        </Box>
+      </Stack>
+    </Paper>
+  )
+}
+
 export function PresetListPanel({
   onOpenCreate,
   onOpenEdit,
@@ -88,6 +301,29 @@ export function PresetListPanel({
   useEffect(() => {
     void loadPresets()
   }, [loadPresets])
+
+  const myPresets = useMemo(
+    () => presets.filter((p) => p.access === 'owner'),
+    [presets],
+  )
+
+  const orgSections = useMemo((): OrgSection[] => {
+    const shared = presets.filter((p) => p.access !== 'owner')
+    const byOrg = new Map<string, OrgSection>()
+    for (const preset of shared) {
+      const key = preset.organizationId ?? 'unknown'
+      const title = preset.organizationName?.trim() || 'Организация'
+      const existing = byOrg.get(key)
+      if (existing) {
+        existing.presets.push(preset)
+      } else {
+        byOrg.set(key, { key, title, presets: [preset] })
+      }
+    }
+    return [...byOrg.values()].sort((a, b) =>
+      a.title.localeCompare(b.title, 'ru'),
+    )
+  }, [presets])
 
   const presetCountLabel = useMemo(() => {
     const n = presets.length
@@ -122,6 +358,21 @@ export function PresetListPanel({
     }
   }
 
+  async function onClone(id: string) {
+    setBusyKey(`clone:${id}`)
+    setError(null)
+    try {
+      const cloned = await cloneTaskPreset(id)
+      setPresets((current) => [cloned, ...current])
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Не удалось клонировать пресет',
+      )
+    } finally {
+      setBusyKey(null)
+    }
+  }
+
   async function onStartRoom(id: string) {
     setBusyKey(`start:${id}`)
     setError(null)
@@ -137,6 +388,8 @@ export function PresetListPanel({
       setBusyKey(null)
     }
   }
+
+  const emptyAll = !loading && presets.length === 0
 
   return (
     <Box className="presets-list-page" sx={{ width: '100%' }}>
@@ -287,10 +540,6 @@ export function PresetListPanel({
         </Alert>
       ) : null}
 
-      <Typography variant="h6" component="h2" sx={{ fontWeight: 600, mb: 2 }}>
-        Мои пресеты
-      </Typography>
-
       {loading ? (
         <Stack spacing={2}>
           {[0, 1, 2].map((key) => (
@@ -337,7 +586,7 @@ export function PresetListPanel({
             </Paper>
           ))}
         </Stack>
-      ) : presets.length === 0 ? (
+      ) : emptyAll ? (
         <Paper
           variant="outlined"
           sx={{
@@ -381,171 +630,68 @@ export function PresetListPanel({
           </Button>
         </Paper>
       ) : (
-        <Stack
-          spacing={2}
-          component="ul"
-          sx={{ listStyle: 'none', m: 0, p: 0 }}
-        >
-          {presets.map((preset) => {
-            const filePaths = Object.keys(preset.files).sort((a, b) =>
-              a.localeCompare(b),
-            )
-            return (
-              <Paper
-                key={preset.id}
-                component="li"
-                elevation={0}
-                variant="outlined"
-                sx={{
-                  borderRadius: 2,
-                  borderColor: 'divider',
-                  overflow: 'hidden',
-                  transition:
-                    'border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease',
-                  '&:hover': {
-                    borderColor: alpha(theme.palette.primary.main, 0.45),
-                    boxShadow: `0 12px 40px ${alpha(theme.palette.common.black, 0.35)}`,
-                    bgcolor: alpha(theme.palette.primary.main, 0.03),
-                  },
-                }}
+        <Stack spacing={3.5}>
+          <Box>
+            <Typography
+              variant="h6"
+              component="h2"
+              sx={{ fontWeight: 600, mb: 2 }}
+            >
+              Мои пресеты
+            </Typography>
+            {myPresets.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                У вас пока нет своих пресетов.
+              </Typography>
+            ) : (
+              <Stack
+                spacing={2}
+                component="ul"
+                sx={{ listStyle: 'none', m: 0, p: 0 }}
               >
-                <Stack direction="row" sx={{ minHeight: 0 }}>
-                  <Box
-                    aria-hidden
-                    sx={{
-                      width: 4,
-                      flexShrink: 0,
-                      bgcolor: alpha(theme.palette.primary.main, 0.65),
-                    }}
+                {myPresets.map((preset) => (
+                  <PresetCard
+                    key={preset.id}
+                    preset={preset}
+                    busyKey={busyKey}
+                    onStartRoom={onStartRoom}
+                    onClone={onClone}
+                    onOpenEdit={onOpenEdit}
+                    onDelete={onDelete}
                   />
-                  <Box sx={{ flex: 1, minWidth: 0, p: 2.25, pl: 2 }}>
-                    <Stack spacing={1.75}>
-                      <Box sx={{ minWidth: 0 }}>
-                        <Typography
-                          variant="h6"
-                          component="h3"
-                          sx={{
-                            fontWeight: 600,
-                            fontSize: '1.05rem',
-                            lineHeight: 1.35,
-                            mb: 0.5,
-                            wordBreak: 'break-word',
-                          }}
-                        >
-                          {preset.title}
-                        </Typography>
-                        {preset.description ? (
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            sx={{
-                              mt: 0.5,
-                              lineHeight: 1.5,
-                            }}
-                          >
-                            {preset.description}
-                          </Typography>
-                        ) : null}
-                        <Stack
-                          direction="row"
-                          spacing={0.75}
-                          sx={{
-                            mt: 1.25,
-                            mb: 1,
-                            alignItems: 'center',
-                            flexWrap: 'wrap',
-                          }}
-                        >
-                          <ScheduleRoundedIcon
-                            sx={{
-                              fontSize: 18,
-                              color: 'text.secondary',
-                              opacity: 0.85,
-                            }}
-                          />
-                          <Typography variant="caption" color="text.secondary">
-                            Обновлён {formatPresetUpdated(preset.updatedAt)} ·{' '}
-                            {formatFileCountRu(filePaths.length)}
-                          </Typography>
-                        </Stack>
-                        <Stack
-                          direction="row"
-                          spacing={0.75}
-                          sx={{ flexWrap: 'wrap', gap: 0.75 }}
-                        >
-                          {filePaths.map((path) => (
-                            <Chip
-                              key={path}
-                              label={path}
-                              size="small"
-                              variant="outlined"
-                              sx={{
-                                fontFamily:
-                                  'ui-monospace, SFMono-Regular, Consolas, monospace',
-                                fontSize: '0.75rem',
-                                height: 'auto',
-                                maxWidth: '100%',
-                                '& .MuiChip-label': {
-                                  whiteSpace: 'normal',
-                                  wordBreak: 'break-all',
-                                  lineHeight: 1.35,
-                                  py: 0.35,
-                                },
-                              }}
-                            />
-                          ))}
-                        </Stack>
-                      </Box>
-                      <Stack
-                        direction={{ xs: 'column', sm: 'row' }}
-                        spacing={1}
-                        sx={{
-                          flexWrap: 'wrap',
-                          alignItems: { xs: 'stretch', sm: 'center' },
-                        }}
-                      >
-                        <Button
-                          variant="contained"
-                          color="primary"
-                          size="small"
-                          onClick={() => void onStartRoom(preset.id)}
-                          disabled={busyKey !== null}
-                          startIcon={
-                            <PlayArrowRoundedIcon sx={{ fontSize: 20 }} />
-                          }
-                          sx={{ borderRadius: 1.5 }}
-                        >
-                          Запустить комнату
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          color="secondary"
-                          size="small"
-                          onClick={() => onOpenEdit(preset.id)}
-                          disabled={busyKey !== null}
-                          startIcon={<EditRoundedIcon sx={{ fontSize: 18 }} />}
-                        >
-                          Редактировать
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          color="error"
-                          size="small"
-                          onClick={() => void onDelete(preset.id)}
-                          disabled={busyKey !== null}
-                          startIcon={
-                            <DeleteOutlineRoundedIcon sx={{ fontSize: 18 }} />
-                          }
-                        >
-                          Удалить
-                        </Button>
-                      </Stack>
-                    </Stack>
-                  </Box>
-                </Stack>
-              </Paper>
-            )
-          })}
+                ))}
+              </Stack>
+            )}
+          </Box>
+
+          {orgSections.map((section) => (
+            <Box key={section.key}>
+              <Typography
+                variant="h6"
+                component="h2"
+                sx={{ fontWeight: 600, mb: 2 }}
+              >
+                {section.title}
+              </Typography>
+              <Stack
+                spacing={2}
+                component="ul"
+                sx={{ listStyle: 'none', m: 0, p: 0 }}
+              >
+                {section.presets.map((preset) => (
+                  <PresetCard
+                    key={preset.id}
+                    preset={preset}
+                    busyKey={busyKey}
+                    onStartRoom={onStartRoom}
+                    onClone={onClone}
+                    onOpenEdit={onOpenEdit}
+                    onDelete={onDelete}
+                  />
+                ))}
+              </Stack>
+            </Box>
+          ))}
         </Stack>
       )}
     </Box>

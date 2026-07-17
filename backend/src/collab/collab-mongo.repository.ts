@@ -242,6 +242,10 @@ export class CollabMongoRepository implements OnModuleInit {
     return room?.ownerUserId === userId;
   }
 
+  async findRoom(roomId: string): Promise<CollabRoomDoc | null> {
+    return this.rooms().findOne({ _id: roomId });
+  }
+
   async insertPasteEvent(
     event: Omit<CollabPasteEventDoc, 'createdAt'> & { createdAt?: Date },
   ): Promise<void> {

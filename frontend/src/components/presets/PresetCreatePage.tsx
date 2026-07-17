@@ -2,14 +2,24 @@ import {
   Alert,
   Box,
   Button,
+  FormControl,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   TextField,
   Typography,
+  type SelectChangeEvent,
 } from '@mui/material'
-import { useRef, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
+import { fetchOrganizations } from '../../api/organizations'
 import { createTaskPreset } from '../../api/taskPresets'
 import { sectionSurfacePaddingSx } from '../../theme/layout'
+import type {
+  OrganizationListItem,
+  TaskPresetVisibility,
+} from '../../types/api.types'
 import {
   PresetSandpackWorkspace,
   type PresetSandpackWorkspaceHandle,
@@ -33,8 +43,45 @@ export function PresetCreatePage({ onBackToList }: PresetCreatePageProps) {
   const sandpackRef = useRef<PresetSandpackWorkspaceHandle | null>(null)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [visibility, setVisibility] = useState<TaskPresetVisibility>('private')
+  const [organizationId, setOrganizationId] = useState('')
+  const [organizations, setOrganizations] = useState<OrganizationListItem[]>([])
+  const [orgsLoading, setOrgsLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      try {
+        const list = await fetchOrganizations()
+        if (alive) {
+          setOrganizations(list)
+        }
+      } catch {
+        if (alive) {
+          setOrganizations([])
+        }
+      } finally {
+        if (alive) {
+          setOrgsLoading(false)
+        }
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  function handleVisibilityChange(event: SelectChangeEvent) {
+    const next = event.target.value as TaskPresetVisibility
+    setVisibility(next)
+    if (next === 'private') {
+      setOrganizationId('')
+    } else if (!organizationId && organizations.length === 1) {
+      setOrganizationId(organizations[0].id)
+    }
+  }
 
   async function handleSavePreset() {
     const t = title.trim()
@@ -42,10 +89,18 @@ export function PresetCreatePage({ onBackToList }: PresetCreatePageProps) {
       setError('Укажите название пресета')
       return
     }
+    if (visibility === 'organization' && !organizationId) {
+      setError('Выберите организацию для шаринга пресета')
+      return
+    }
 
-    const files = sandpackRef.current?.getPresetFiles() ?? []
-    if (files.length === 0) {
-      setError('Не удалось прочитать файлы редактора — обновите страницу')
+    const exported = sandpackRef.current?.getExport()
+    if (!exported || exported.files.length === 0) {
+      setError(
+        exported?.solutionFiles.length
+          ? 'Нужен хотя бы один стартовый файл — не все файлы могут быть решением'
+          : 'Не удалось прочитать файлы редактора — обновите страницу',
+      )
       return
     }
 
@@ -55,7 +110,11 @@ export function PresetCreatePage({ onBackToList }: PresetCreatePageProps) {
       await createTaskPreset({
         title: t,
         description: description.trim() || undefined,
-        files,
+        files: exported.files,
+        solutionFiles: exported.solutionFiles,
+        visibility,
+        organizationId:
+          visibility === 'organization' ? organizationId : undefined,
       })
       onBackToList()
     } catch (err) {
@@ -64,6 +123,8 @@ export function PresetCreatePage({ onBackToList }: PresetCreatePageProps) {
       setBusy(false)
     }
   }
+
+  const formDisabled = busy || !isSandpackCryptoAvailable()
 
   return (
     <Box
@@ -106,7 +167,7 @@ export function PresetCreatePage({ onBackToList }: PresetCreatePageProps) {
               variant="contained"
               color="primary"
               size="medium"
-              disabled={busy || !title.trim() || !isSandpackCryptoAvailable()}
+              disabled={formDisabled || !title.trim()}
               onClick={() => void handleSavePreset()}
               sx={{ borderRadius: 1.5, flexShrink: 0 }}
             >
@@ -125,7 +186,7 @@ export function PresetCreatePage({ onBackToList }: PresetCreatePageProps) {
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Например: React todo с багом в фильтрации"
               slotProps={{ htmlInput: { maxLength: 120 } }}
-              disabled={busy || !isSandpackCryptoAvailable()}
+              disabled={formDisabled}
               fullWidth
               required
               size="small"
@@ -138,7 +199,7 @@ export function PresetCreatePage({ onBackToList }: PresetCreatePageProps) {
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Задание и ожидаемый результат"
               slotProps={{ htmlInput: { maxLength: 1000 } }}
-              disabled={busy || !isSandpackCryptoAvailable()}
+              disabled={formDisabled}
               fullWidth
               size="small"
               multiline
@@ -147,6 +208,63 @@ export function PresetCreatePage({ onBackToList }: PresetCreatePageProps) {
               sx={{ flex: { md: 1.2 }, minWidth: 0 }}
             />
           </Stack>
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={1.5}
+            sx={{ alignItems: 'stretch' }}
+          >
+            <FormControl size="small" sx={{ minWidth: 200, flex: 1 }} disabled={formDisabled}>
+              <InputLabel id="create-preset-visibility-label">
+                Видимость
+              </InputLabel>
+              <Select
+                labelId="create-preset-visibility-label"
+                id="create-preset-visibility"
+                label="Видимость"
+                value={visibility}
+                onChange={handleVisibilityChange}
+              >
+                <MenuItem value="private">Только я</MenuItem>
+                <MenuItem value="organization" disabled={organizations.length === 0 && !orgsLoading}>
+                  Организация
+                </MenuItem>
+              </Select>
+            </FormControl>
+            {visibility === 'organization' ? (
+              <FormControl
+                size="small"
+                sx={{ minWidth: 220, flex: 1.2 }}
+                disabled={formDisabled || orgsLoading}
+                required
+              >
+                <InputLabel id="create-preset-org-label">Организация</InputLabel>
+                <Select
+                  labelId="create-preset-org-label"
+                  id="create-preset-org"
+                  label="Организация"
+                  value={organizationId}
+                  onChange={(e) => setOrganizationId(e.target.value)}
+                >
+                  {organizations.map((org) => (
+                    <MenuItem key={org.id} value={org.id}>
+                      {org.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            ) : null}
+          </Stack>
+          {visibility === 'organization' &&
+          !orgsLoading &&
+          organizations.length === 0 ? (
+            <Typography variant="caption" color="warning.main">
+              Нет организаций — создайте организацию, чтобы шарить пресет.
+            </Typography>
+          ) : null}
+          <Typography variant="caption" color="text.secondary">
+            В проводнике ПКМ по файлу → «Пометить как решение»: эти файлы не
+            попадут в комнату кандидатам, их увидит только ведущий.
+          </Typography>
         </Stack>
       </Paper>
 

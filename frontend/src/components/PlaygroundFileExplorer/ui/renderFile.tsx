@@ -26,6 +26,7 @@ export function renderFile({
   handleDropToFolder,
   renderDraftRowAtDepth,
   FileTypeIcon,
+  isSolution = false,
 }: {
   file: ExplorerFileNode
   depth: number
@@ -45,6 +46,7 @@ export function renderFile({
   handleDropToFolder: (targetFolderPath: string) => void
   renderDraftRowAtDepth: (depth: number) => ReactNode
   FileTypeIcon: (props: { filePath: string }) => ReactNode
+  isSolution?: boolean
 }) {
   if (
     draft?.mode === 'rename' &&
@@ -153,6 +155,11 @@ export function renderFile({
       >
         <FileTypeIcon filePath={file.path} />
         <span className="playground__treeName">{file.name}</span>
+        {isSolution ? (
+          <span className="playground__solutionBadge" title="Файл решения">
+            решение
+          </span>
+        ) : null}
         {filePeers.length > 0 ? (
           <span
             className="playground__filePeerDots"

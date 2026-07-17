@@ -2,6 +2,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsIn,
   IsOptional,
   IsString,
   MaxLength,
@@ -32,4 +33,23 @@ export class CreateTaskPresetDto {
   @ValidateNested({ each: true })
   @Type(() => TaskPresetFileDto)
   files!: TaskPresetFileDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => TaskPresetFileDto)
+  solutionFiles?: TaskPresetFileDto[];
+
+  @IsOptional()
+  @IsIn(['private', 'organization'])
+  visibility?: 'private' | 'organization';
+
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  organizationId?: string;
 }

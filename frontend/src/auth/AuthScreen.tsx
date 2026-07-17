@@ -34,6 +34,9 @@ export function AuthScreen() {
   const [showPasswordAuth, setShowPasswordAuth] = useState(false)
 
   const displayError = localError ?? authError
+  const hasOrgInvite = Boolean(
+    new URLSearchParams(window.location.search).get('orgInvite')?.trim(),
+  )
 
   useYandexOAuthCallback((message) => setLocalError(message))
 
@@ -102,6 +105,11 @@ export function AuthScreen() {
         <Typography variant="body1" color="text.secondary">
           Войдите через VK ID или Яндекс. Почта и пароль — по кнопке ниже.
         </Typography>
+        {hasOrgInvite ? (
+          <Alert severity="info" sx={{ mt: 2 }}>
+            После входа вы сможете принять приглашение в организацию.
+          </Alert>
+        ) : null}
       </Box>
 
       <Paper

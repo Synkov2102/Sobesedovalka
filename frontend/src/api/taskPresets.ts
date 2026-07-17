@@ -1,4 +1,9 @@
-import type { TaskPreset, TaskPresetFile } from '../types/api.types'
+import type {
+  RoomSolutionResponse,
+  TaskPreset,
+  TaskPresetFile,
+  TaskPresetVisibility,
+} from '../types/api.types'
 import { apiFetch } from './apiFetch'
 
 async function readApiError(res: Response): Promise<string> {
@@ -20,10 +25,13 @@ async function readApiError(res: Response): Promise<string> {
   return res.statusText || String(res.status)
 }
 
-type TaskPresetPayload = {
+export type TaskPresetPayload = {
   title: string
   description?: string
   files: TaskPresetFile[]
+  solutionFiles?: TaskPresetFile[]
+  visibility?: TaskPresetVisibility
+  organizationId?: string
 }
 
 function encPresetId(id: string): string {
@@ -84,6 +92,16 @@ export async function deleteTaskPreset(id: string): Promise<void> {
   }
 }
 
+export async function cloneTaskPreset(id: string): Promise<TaskPreset> {
+  const res = await apiFetch(`/task-presets/${encPresetId(id)}/clone`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    throw new Error(await readApiError(res))
+  }
+  return (await res.json()) as TaskPreset
+}
+
 export async function startRoomFromPreset(
   id: string,
 ): Promise<{ roomId: string }> {
@@ -104,4 +122,18 @@ export async function fetchCollabRoomReady(roomId: string): Promise<boolean> {
   }
   const body = (await res.json()) as { ready?: unknown }
   return body.ready === true
+}
+
+export async function fetchRoomSolution(
+  roomId: string,
+): Promise<RoomSolutionResponse | null> {
+  const enc = encodeURIComponent(roomId)
+  const res = await apiFetch(`/task-presets/collab-room/${enc}/solution`)
+  if (res.status === 403 || res.status === 404) {
+    return null
+  }
+  if (!res.ok) {
+    throw new Error(await readApiError(res))
+  }
+  return (await res.json()) as RoomSolutionResponse
 }

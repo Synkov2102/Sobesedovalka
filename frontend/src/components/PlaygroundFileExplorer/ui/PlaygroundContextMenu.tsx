@@ -15,6 +15,8 @@ type Props = {
   handleDeleteContextFile: () => void
   canRenameFolder: (folderPath: string) => boolean
   canRenameFile: (path: string) => boolean
+  solutionPaths?: ReadonlySet<string>
+  onToggleSolution?: () => void
 }
 
 export function PlaygroundContextMenu({
@@ -32,6 +34,8 @@ export function PlaygroundContextMenu({
   handleDeleteContextFile,
   canRenameFolder,
   canRenameFile,
+  solutionPaths,
+  onToggleSolution,
 }: Props) {
   if (!contextMenu) {
     return null
@@ -107,6 +111,18 @@ export function PlaygroundContextMenu({
           >
             Копировать путь
           </button>
+          {onToggleSolution ? (
+            <button
+              type="button"
+              className="playground__contextMenuItem"
+              onClick={onToggleSolution}
+            >
+              {contextMenu.target.kind === 'file' &&
+              solutionPaths?.has(contextMenu.target.path)
+                ? 'Убрать из решения'
+                : 'Пометить как решение'}
+            </button>
+          ) : null}
           <button
             type="button"
             className="playground__contextMenuItem"

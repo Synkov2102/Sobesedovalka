@@ -314,3 +314,16 @@
 .playground__contextMenuItem.is-danger {
   color: #dc2626;
 }
+
+.playground__solutionBadge {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--accent) 90%, var(--text-h));
+  background: color-mix(in srgb, var(--accent-bg) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}

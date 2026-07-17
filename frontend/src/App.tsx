@@ -20,6 +20,8 @@ import { AuthScreen } from './auth/AuthScreen'
 import { AppBrandWordmark } from './components/AppBrandWordmark'
 import { ThemeModeToggle } from './components/ThemeModeToggle'
 import { RoomsPanel } from './components/RoomsPanel'
+import { OrganizationsPanel } from './components/organizations/OrganizationsPanel'
+import { OrgInviteAcceptScreen } from './components/organizations/OrgInviteAcceptScreen'
 import { PresetCreatePage } from './components/presets/PresetCreatePage'
 import { PresetEditPage } from './components/presets/PresetEditPage'
 import { PresetListPanel } from './components/presets/PresetListPanel'
@@ -41,7 +43,37 @@ function readMainTabFromUrl(): MainTab {
   if (raw === 'presets') {
     return 'presets'
   }
+  if (raw === 'organizations') {
+    return 'organizations'
+  }
   return 'rooms'
+}
+
+function readOrgInviteTokenFromSearch(search: string): string | null {
+  const raw = new URLSearchParams(search).get('orgInvite')?.trim()
+  return raw ? raw : null
+}
+
+/** Backend invite URLs use `/org-invite/:token`; normalize to `?orgInvite=`. */
+function normalizeOrgInvitePath(): void {
+  const match = window.location.pathname.match(/^\/org-invite\/([^/]+)\/?$/)
+  if (!match) {
+    return
+  }
+  const token = decodeURIComponent(match[1]).trim()
+  if (!token) {
+    return
+  }
+  const url = new URL(window.location.href)
+  url.pathname = '/'
+  url.searchParams.set('orgInvite', token)
+  window.history.replaceState({}, '', url.pathname + url.search)
+}
+
+function clearOrgInviteFromUrl(): void {
+  const url = new URL(window.location.href)
+  url.searchParams.delete('orgInvite')
+  window.history.replaceState({}, '', url.pathname + url.search)
 }
 
 function migratePresetFocusToCreateUrl(): void {
@@ -102,8 +134,12 @@ function AppMain({ user, logout }: AppMainProps) {
   const [navRevision, setNavRevision] = useState(() => {
     migratePresetFocusToCreateUrl()
     normalizeLegacyUrlTabs()
+    normalizeOrgInvitePath()
     return 0
   })
+  const [focusOrganizationId, setFocusOrganizationId] = useState<string | null>(
+    null,
+  )
 
   const bumpNav = useCallback(() => {
     setNavRevision((n) => n + 1)
@@ -124,7 +160,12 @@ function AppMain({ user, logout }: AppMainProps) {
     void navRevision
     return readRoomIdFromSearch(window.location.search)
   }, [navRevision])
+  const orgInviteToken = useMemo(() => {
+    void navRevision
+    return readOrgInviteTokenFromSearch(window.location.search)
+  }, [navRevision])
   const isSandbox = Boolean(roomId)
+  const isOrgInvite = Boolean(orgInviteToken) && !isSandbox
   const presetEditorRoute = useMemo(() => {
     if (mainTab !== 'presets') {
       return 'list' as const
@@ -144,7 +185,32 @@ function AppMain({ user, logout }: AppMainProps) {
       url.searchParams.set('tab', next)
       url.searchParams.delete('room')
       url.searchParams.delete('preset')
+      url.searchParams.delete('orgInvite')
       window.history.pushState({}, '', url.pathname + url.search)
+      bumpNav()
+    },
+    [bumpNav],
+  )
+
+  const dismissOrgInvite = useCallback(() => {
+    clearOrgInviteFromUrl()
+    const url = new URL(window.location.href)
+    url.searchParams.set('tab', 'organizations')
+    url.searchParams.delete('room')
+    url.searchParams.delete('preset')
+    window.history.replaceState({}, '', url.pathname + url.search)
+    bumpNav()
+  }, [bumpNav])
+
+  const onOrgInviteAccepted = useCallback(
+    (organizationId: string) => {
+      clearOrgInviteFromUrl()
+      setFocusOrganizationId(organizationId)
+      const url = new URL(window.location.href)
+      url.searchParams.set('tab', 'organizations')
+      url.searchParams.delete('room')
+      url.searchParams.delete('preset')
+      window.history.replaceState({}, '', url.pathname + url.search)
       bumpNav()
     },
     [bumpNav],
@@ -287,6 +353,15 @@ function AppMain({ user, logout }: AppMainProps) {
               >
                 К списку пресетов
               </Button>
+            ) : isOrgInvite ? (
+              <Button
+                variant="outlined"
+                color="primary"
+                size="small"
+                onClick={dismissOrgInvite}
+              >
+                К организациям
+              </Button>
             ) : (
               <ToggleButtonGroup
                 exclusive
@@ -311,6 +386,7 @@ function AppMain({ user, logout }: AppMainProps) {
               >
                 <ToggleButton value="rooms">Комнаты</ToggleButton>
                 <ToggleButton value="presets">Пресеты</ToggleButton>
+                <ToggleButton value="organizations">Организации</ToggleButton>
               </ToggleButtonGroup>
             )}
           </Stack>
@@ -379,6 +455,13 @@ function AppMain({ user, logout }: AppMainProps) {
             </Suspense>
           </Box>
         </Paper>
+      ) : isOrgInvite && orgInviteToken ? (
+        <OrgInviteAcceptScreen
+          key={orgInviteToken}
+          token={orgInviteToken}
+          onAccepted={onOrgInviteAccepted}
+          onDismiss={dismissOrgInvite}
+        />
       ) : mainTab === 'presets' ? (
         isPresetEditor ? (
           <Box
@@ -407,6 +490,11 @@ function AppMain({ user, logout }: AppMainProps) {
             onOpenEdit={openPresetEdit}
           />
         )
+      ) : mainTab === 'organizations' ? (
+        <OrganizationsPanel
+          currentUserId={user.id}
+          initialOrganizationId={focusOrganizationId}
+        />
       ) : (
         <RoomsPanel onOpenRoom={navigateToPlaygroundRoom} />
       )}
@@ -416,6 +504,10 @@ function AppMain({ user, logout }: AppMainProps) {
 
 function App() {
   const { user, ready, logout } = useAuth()
+
+  useEffect(() => {
+    normalizeOrgInvitePath()
+  }, [])
 
   if (!ready) {
     return (

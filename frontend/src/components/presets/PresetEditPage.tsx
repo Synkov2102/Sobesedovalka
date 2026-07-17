@@ -3,15 +3,25 @@ import {
   Box,
   Button,
   CircularProgress,
+  FormControl,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   TextField,
   Typography,
+  type SelectChangeEvent,
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { fetchOrganizations } from '../../api/organizations'
 import { fetchTaskPreset, updateTaskPreset } from '../../api/taskPresets'
 import { sectionSurfacePaddingSx } from '../../theme/layout'
-import type { TaskPreset } from '../../types/api.types'
+import type {
+  OrganizationListItem,
+  TaskPreset,
+  TaskPresetVisibility,
+} from '../../types/api.types'
 import {
   PresetSandpackWorkspace,
   type PresetSandpackWorkspaceHandle,
@@ -42,6 +52,10 @@ export function PresetEditPage({
   const [loadingPreset, setLoadingPreset] = useState(true)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [visibility, setVisibility] = useState<TaskPresetVisibility>('private')
+  const [organizationId, setOrganizationId] = useState('')
+  const [organizations, setOrganizations] = useState<OrganizationListItem[]>([])
+  const [orgsLoading, setOrgsLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -50,6 +64,13 @@ export function PresetEditPage({
       return undefined
     }
     return preset.files
+  }, [preset])
+
+  const stableInitialSolutionFiles = useMemo(() => {
+    if (!preset) {
+      return undefined
+    }
+    return preset.solutionFiles ?? {}
   }, [preset])
 
   const loadPreset = useCallback(async () => {
@@ -61,6 +82,8 @@ export function PresetEditPage({
       setPreset(data)
       setTitle(data.title)
       setDescription(data.description ?? '')
+      setVisibility(data.visibility ?? 'private')
+      setOrganizationId(data.organizationId ?? '')
     } catch (err) {
       setLoadError(
         err instanceof Error ? err.message : 'Не удалось загрузить пресет',
@@ -74,16 +97,57 @@ export function PresetEditPage({
     void loadPreset()
   }, [loadPreset])
 
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      try {
+        const list = await fetchOrganizations()
+        if (alive) {
+          setOrganizations(list)
+        }
+      } catch {
+        if (alive) {
+          setOrganizations([])
+        }
+      } finally {
+        if (alive) {
+          setOrgsLoading(false)
+        }
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  function handleVisibilityChange(event: SelectChangeEvent) {
+    const next = event.target.value as TaskPresetVisibility
+    setVisibility(next)
+    if (next === 'private') {
+      setOrganizationId('')
+    } else if (!organizationId && organizations.length === 1) {
+      setOrganizationId(organizations[0].id)
+    }
+  }
+
   async function handleSavePreset() {
     const t = title.trim()
     if (!t) {
       setError('Укажите название пресета')
       return
     }
+    if (visibility === 'organization' && !organizationId) {
+      setError('Выберите организацию для шаринга пресета')
+      return
+    }
 
-    const files = sandpackRef.current?.getPresetFiles() ?? []
-    if (files.length === 0) {
-      setError('Не удалось прочитать файлы редактора — обновите страницу')
+    const exported = sandpackRef.current?.getExport()
+    if (!exported || exported.files.length === 0) {
+      setError(
+        exported?.solutionFiles.length
+          ? 'Нужен хотя бы один стартовый файл — не все файлы могут быть решением'
+          : 'Не удалось прочитать файлы редактора — обновите страницу',
+      )
       return
     }
 
@@ -93,7 +157,12 @@ export function PresetEditPage({
       await updateTaskPreset(presetId, {
         title: t,
         description: description.trim() || undefined,
-        files,
+        files: exported.files,
+        solutionFiles: exported.solutionFiles,
+        visibility,
+        ...(visibility === 'organization'
+          ? { organizationId }
+          : {}),
       })
       onBackToList()
     } catch (err) {
@@ -138,6 +207,22 @@ export function PresetEditPage({
     )
   }
 
+  if (preset.access !== 'owner') {
+    return (
+      <Box sx={{ flex: 1, minHeight: 0, py: 2 }}>
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Редактировать можно только свои пресеты. Клонируйте пресет из списка,
+          чтобы получить свою копию.
+        </Alert>
+        <Button variant="outlined" onClick={onBackToList}>
+          К списку пресетов
+        </Button>
+      </Box>
+    )
+  }
+
+  const formDisabled = busy || !isSandpackCryptoAvailable()
+
   return (
     <Box
       className="preset-edit-page"
@@ -179,7 +264,7 @@ export function PresetEditPage({
               variant="contained"
               color="primary"
               size="medium"
-              disabled={busy || !title.trim() || !isSandpackCryptoAvailable()}
+              disabled={formDisabled || !title.trim()}
               onClick={() => void handleSavePreset()}
               sx={{ borderRadius: 1.5, flexShrink: 0 }}
             >
@@ -198,7 +283,7 @@ export function PresetEditPage({
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Например: React todo с багом в фильтрации"
               slotProps={{ htmlInput: { maxLength: 120 } }}
-              disabled={busy || !isSandpackCryptoAvailable()}
+              disabled={formDisabled}
               fullWidth
               required
               size="small"
@@ -211,7 +296,7 @@ export function PresetEditPage({
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Задание и ожидаемый результат"
               slotProps={{ htmlInput: { maxLength: 1000 } }}
-              disabled={busy || !isSandpackCryptoAvailable()}
+              disabled={formDisabled}
               fullWidth
               size="small"
               multiline
@@ -220,6 +305,59 @@ export function PresetEditPage({
               sx={{ flex: { md: 1.2 }, minWidth: 0 }}
             />
           </Stack>
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={1.5}
+            sx={{ alignItems: 'stretch' }}
+          >
+            <FormControl size="small" sx={{ minWidth: 200, flex: 1 }} disabled={formDisabled}>
+              <InputLabel id="edit-preset-visibility-label">
+                Видимость
+              </InputLabel>
+              <Select
+                labelId="edit-preset-visibility-label"
+                id="edit-preset-visibility"
+                label="Видимость"
+                value={visibility}
+                onChange={handleVisibilityChange}
+              >
+                <MenuItem value="private">Только я</MenuItem>
+                <MenuItem
+                  value="organization"
+                  disabled={organizations.length === 0 && !orgsLoading}
+                >
+                  Организация
+                </MenuItem>
+              </Select>
+            </FormControl>
+            {visibility === 'organization' ? (
+              <FormControl
+                size="small"
+                sx={{ minWidth: 220, flex: 1.2 }}
+                disabled={formDisabled || orgsLoading}
+                required
+              >
+                <InputLabel id="edit-preset-org-label">Организация</InputLabel>
+                <Select
+                  labelId="edit-preset-org-label"
+                  id="edit-preset-org"
+                  label="Организация"
+                  value={organizationId}
+                  onChange={(e) => setOrganizationId(e.target.value)}
+                >
+                  {organizations.map((org) => (
+                    <MenuItem key={org.id} value={org.id}>
+                      {org.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            ) : null}
+          </Stack>
+          <Typography variant="caption" color="text.secondary">
+            В проводнике ПКМ по файлу → «Пометить как решение»: эти файлы не
+            попадут в комнату кандидатам, их увидит только ведущий.
+          </Typography>
         </Stack>
       </Paper>
 
@@ -259,6 +397,7 @@ export function PresetEditPage({
             ref={sandpackRef}
             key={preset.id}
             initialFiles={stableInitialFiles}
+            initialSolutionFiles={stableInitialSolutionFiles}
           />
         </Box>
       ) : null}

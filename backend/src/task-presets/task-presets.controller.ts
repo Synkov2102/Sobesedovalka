@@ -29,6 +29,14 @@ export class TaskPresetsController {
     return this.service.list(req.user.userId);
   }
 
+  @Get('collab-room/:roomId/solution')
+  getRoomSolution(
+    @Req() req: AuthedRequest,
+    @Param('roomId') roomId: string,
+  ) {
+    return this.service.getRoomSolution(req.user.userId, roomId);
+  }
+
   @Get('collab-room/:roomId')
   collabRoomStatus(@Param('roomId') roomId: string) {
     return this.service.collabRoomReady(roomId);
@@ -47,6 +55,11 @@ export class TaskPresetsController {
   @Post(':id/start-room')
   startRoom(@Req() req: AuthedRequest, @Param('id') id: string) {
     return this.service.startRoom(req.user.userId, id);
+  }
+
+  @Post(':id/clone')
+  clone(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.service.clone(req.user.userId, id);
   }
 
   @Patch(':id')
