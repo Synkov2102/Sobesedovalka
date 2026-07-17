@@ -12,6 +12,7 @@ services:
       NODE_ENV: production
       PORT: ${PORT:-3000}
       CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-}
       JWT_SECRET: ${JWT_SECRET:-local-dev-jwt-secret-min-32-chars!!}
       MONGODB_URI: ${MONGODB_URI:?Set MONGODB_URI in .env — see .env.example}
       VK_CLIENT_ID: ${VK_CLIENT_ID:-}

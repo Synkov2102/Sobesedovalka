@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { UsersRepository } from '../auth/users.repository';
-import { corsOriginFromEnv } from '../cors-env';
+import { publicAppOriginFromEnv } from '../public-app-url';
 import { TaskPresetsRepository } from '../task-presets/task-presets.repository';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { OrganizationsRepository } from './organizations.repository';
@@ -127,13 +127,20 @@ export class OrganizationsService {
       pendingInvites: canSeeInvites
         ? pending
             .filter((inv) => Date.parse(inv.expiresAt) > now)
-            .map((inv) => ({
-              id: inv._id,
-              status: inv.status,
-              expiresAt: inv.expiresAt,
-              createdAt: inv.createdAt,
-              createdByUserId: inv.createdByUserId,
-            }))
+            .map((inv) => {
+              const view: OrganizationDetailView['pendingInvites'][number] = {
+                id: inv._id,
+                status: inv.status,
+                expiresAt: inv.expiresAt,
+                createdAt: inv.createdAt,
+                createdByUserId: inv.createdByUserId,
+              };
+              if (inv.token) {
+                view.token = inv.token;
+                view.inviteUrl = buildInviteUrl(inv.token);
+              }
+              return view;
+            })
         : [],
       createdAt: org.createdAt,
       updatedAt: org.updatedAt,
@@ -160,6 +167,7 @@ export class OrganizationsService {
       _id: inviteId,
       organizationId,
       tokenHash,
+      token: rawToken,
       createdByUserId: userId,
       status: 'pending',
       expiresAt,
@@ -361,9 +369,7 @@ export class OrganizationsService {
     return this.repo.listOrganizationIdsForUser(userId);
   }
 
-  async getOrganizationNames(
-    ids: string[],
-  ): Promise<Map<string, string>> {
+  async getOrganizationNames(ids: string[]): Promise<Map<string, string>> {
     const orgs = await this.repo.findOrganizationsByIds(ids);
     return new Map(orgs.map((o) => [o._id, o.name]));
   }
@@ -387,7 +393,10 @@ export class OrganizationsService {
   private effectiveInviteStatus(
     invite: OrganizationInviteDoc,
   ): OrganizationInviteDoc['status'] | 'expired' {
-    if (invite.status === 'pending' && Date.parse(invite.expiresAt) <= Date.now()) {
+    if (
+      invite.status === 'pending' &&
+      Date.parse(invite.expiresAt) <= Date.now()
+    ) {
       return 'expired';
     }
     return invite.status;
@@ -399,10 +408,6 @@ function hashInviteToken(token: string): string {
 }
 
 function buildInviteUrl(token: string): string {
-  const origins = corsOriginFromEnv();
-  const base =
-    origins === true
-      ? 'http://localhost:5173'
-      : (origins[0] ?? 'http://localhost:5173');
+  const base = publicAppOriginFromEnv();
   return `${base.replace(/\/$/, '')}/org-invite/${token}`;
 }

@@ -67,9 +67,7 @@ export class OrganizationsRepository implements OnModuleInit {
     return this.members.findOne({ organizationId, userId });
   }
 
-  async listMembers(
-    organizationId: string,
-  ): Promise<OrganizationMemberDoc[]> {
+  async listMembers(organizationId: string): Promise<OrganizationMemberDoc[]> {
     return this.members
       .find({ organizationId })
       .sort({ createdAt: 1 })
@@ -101,10 +99,7 @@ export class OrganizationsRepository implements OnModuleInit {
     return result.matchedCount > 0;
   }
 
-  async deleteMember(
-    organizationId: string,
-    userId: string,
-  ): Promise<boolean> {
+  async deleteMember(organizationId: string, userId: string): Promise<boolean> {
     const result = await this.members.deleteOne({ organizationId, userId });
     return result.deletedCount > 0;
   }
@@ -145,7 +140,7 @@ export class OrganizationsRepository implements OnModuleInit {
   ): Promise<boolean> {
     const result = await this.invites.updateOne(
       { _id: inviteId, organizationId, status: 'pending' },
-      { $set: { status: 'revoked' } },
+      { $set: { status: 'revoked' }, $unset: { token: '' } },
     );
     return result.matchedCount > 0;
   }
@@ -163,6 +158,7 @@ export class OrganizationsRepository implements OnModuleInit {
           usedByUserId,
           usedAt,
         },
+        $unset: { token: '' },
       },
     );
     return result.matchedCount > 0;

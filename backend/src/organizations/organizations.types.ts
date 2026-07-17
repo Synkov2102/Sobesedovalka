@@ -22,6 +22,8 @@ export type OrganizationInviteDoc = {
   _id: string;
   organizationId: string;
   tokenHash: string;
+  /** Raw token while pending — so owners can copy the link again. Cleared on use/revoke. */
+  token?: string;
   createdByUserId: string;
   status: InviteStatus;
   expiresAt: string;
@@ -51,6 +53,10 @@ export type OrganizationInviteView = {
   expiresAt: string;
   createdAt: string;
   createdByUserId: string;
+  /** Absolute invite URL when raw token is still stored (pending). */
+  inviteUrl?: string;
+  /** Raw token for client-side URL rebuild with window.location.origin. */
+  token?: string;
 };
 
 export type OrganizationDetailView = {

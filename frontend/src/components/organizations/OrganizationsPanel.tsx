@@ -42,6 +42,7 @@ import {
 import { sectionSurfacePaddingSx } from '../../theme/layout'
 import type {
   OrganizationDetailView,
+  OrganizationInviteView,
   OrganizationListItem,
   OrganizationMemberView,
   OrganizationRole,
@@ -117,6 +118,40 @@ function removeActionLabel(
   targetUserId: string,
 ): string {
   return actorUserId === targetUserId ? 'Выйти' : 'Исключить'
+}
+
+function isLocalhostHost(hostname: string): boolean {
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '[::1]' ||
+    hostname === '::1'
+  )
+}
+
+/** Prefer client origin; rewrite broken localhost absolute URLs from API on prod. */
+function inviteLinkForCopy(invite: {
+  inviteUrl?: string
+  token?: string
+}): string | null {
+  if (invite.token) {
+    return `${window.location.origin}/org-invite/${invite.token}`
+  }
+  if (!invite.inviteUrl) {
+    return null
+  }
+  try {
+    const parsed = new URL(invite.inviteUrl)
+    if (
+      isLocalhostHost(parsed.hostname) &&
+      !isLocalhostHost(window.location.hostname)
+    ) {
+      return `${window.location.origin}${parsed.pathname}${parsed.search}`
+    }
+  } catch {
+    // keep absolute URL as returned
+  }
+  return invite.inviteUrl
 }
 
 export function OrganizationsPanel({
@@ -235,11 +270,13 @@ export function OrganizationsPanel({
     setError(null)
     try {
       const invite = await createOrganizationInvite(detail.id)
+      const url =
+        inviteLinkForCopy({ inviteUrl: invite.inviteUrl }) ?? invite.inviteUrl
       try {
-        await navigator.clipboard.writeText(invite.inviteUrl)
+        await navigator.clipboard.writeText(url)
         setSnackbar('Ссылка-приглашение скопирована')
       } catch {
-        setSnackbar(invite.inviteUrl)
+        setSnackbar(url)
       }
       await loadDetail(detail.id)
     } catch (err) {
@@ -248,6 +285,28 @@ export function OrganizationsPanel({
           ? err.message
           : 'Не удалось создать приглашение',
       )
+    } finally {
+      setBusyKey(null)
+    }
+  }
+
+  async function handleCopyInvite(invite: OrganizationInviteView) {
+    const url = inviteLinkForCopy(invite)
+    if (!url) {
+      setError(
+        'Ссылку нельзя восстановить: приглашение создано до обновления. Создайте новое.',
+      )
+      return
+    }
+    setBusyKey(`copy:${invite.id}`)
+    setError(null)
+    try {
+      try {
+        await navigator.clipboard.writeText(url)
+        setSnackbar('Ссылка-приглашение скопирована')
+      } catch {
+        setSnackbar(url)
+      }
     } finally {
       setBusyKey(null)
     }
@@ -713,19 +772,43 @@ export function OrganizationsPanel({
                               Создано {formatUpdated(invite.createdAt)}
                             </Typography>
                           </Box>
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            color="error"
-                            disabled={busyKey !== null}
-                            startIcon={
-                              <LinkOffRoundedIcon sx={{ fontSize: 18 }} />
-                            }
-                            onClick={() => void handleRevokeInvite(invite.id)}
-                            sx={{ borderRadius: 1.5 }}
+                          <Stack
+                            direction="row"
+                            spacing={1}
+                            sx={{
+                              flexShrink: 0,
+                              justifyContent: { xs: 'stretch', sm: 'flex-end' },
+                            }}
                           >
-                            Отозвать
-                          </Button>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              disabled={
+                                busyKey !== null ||
+                                inviteLinkForCopy(invite) === null
+                              }
+                              startIcon={
+                                <ContentCopyRoundedIcon sx={{ fontSize: 18 }} />
+                              }
+                              onClick={() => void handleCopyInvite(invite)}
+                              sx={{ borderRadius: 1.5 }}
+                            >
+                              Скопировать
+                            </Button>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              color="error"
+                              disabled={busyKey !== null}
+                              startIcon={
+                                <LinkOffRoundedIcon sx={{ fontSize: 18 }} />
+                              }
+                              onClick={() => void handleRevokeInvite(invite.id)}
+                              sx={{ borderRadius: 1.5 }}
+                            >
+                              Отозвать
+                            </Button>
+                          </Stack>
                         </Stack>
                       </Paper>
                     ))}

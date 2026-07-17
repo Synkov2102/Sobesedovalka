@@ -54,6 +54,8 @@ export type OrganizationInviteView = {
   expiresAt: string
   createdAt: string
   createdByUserId: string
+  inviteUrl?: string
+  token?: string
 }
 
 export type OrganizationDetailView = {
